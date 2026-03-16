@@ -1,8 +1,13 @@
-# Sandman
+   _____                 _                           
+  / ____|               | |                          
+ | (___   __ _ _ __   __| |_ __ ___   __ _ _ __      
+  \___ \ / _` | '_ \ / _` | '_ ` _ \ / _` | '_ \     
+  ____) | (_| | | | | (_| | | | | | | (_| | | | |    
+ |_____/ \__,_|_| |_|\__,_|_| |_| |_|\__,_|_| |_|    
 
 Provision disposable cloud environments in seconds.
 
-Sandman is an open‑source CLI that automates the creation and destruction of temporary cloud environments on AWS and GCP.
+Sandman is an open-source CLI that automates the creation and destruction of temporary cloud environments on AWS and GCP.
 
 Perfect for:
 
@@ -118,17 +123,17 @@ Create a sandbox for testing.
 
 ```bash
 sandman init gcp
-sandman create rivora-demo
+sandman create demo-env
 sandman enable compute storage cloudrun
-sandman connect rivora-demo
+sandman connect demo-env
 ```
 
-Run your application against the environment.
+Run your application or tests against the environment.
 
 Then destroy it when finished.
 
 ```bash
-sandman destroy rivora-demo
+sandman destroy demo-env
 ```
 
 ---
@@ -253,36 +258,13 @@ Uses Google Cloud APIs to provision:
 
 Create disposable environments for product demos.
 
-### AI builder infrastructure
+### Rapid experimentation
 
-Spin up environments for AI apps.
+Spin up temporary environments to test infrastructure or integrations.
 
-### Testing infrastructure tools
+### Learning cloud infrastructure
 
-Test monitoring tools, scaling systems, and infrastructure automation.
-
----
-
-## Example: Rivora
-
-Sandman works well with infrastructure automation tools.
-
-Example workflow:
-
-```bash
-sandman create rivora-demo
-sandman enable compute storage
-sandman connect rivora-demo
-
-rivora init
-rivora scan
-```
-
-Destroy when finished.
-
-```bash
-sandman destroy rivora-demo
-```
+Practice working with cloud services without maintaining long-lived infrastructure.
 
 ---
 
@@ -310,7 +292,7 @@ package.json
 Planned features:
 
 • Environment templates  
-• Multi‑cloud provisioning  
+• Multi-cloud provisioning  
 • GitHub demo environments  
 • Local testing environments  
 
