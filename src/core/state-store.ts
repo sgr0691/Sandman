@@ -1,24 +1,32 @@
-import { promises as fs } from 'fs';
-import { dirname } from 'path';
-import { Config, ConfigSchema, EnvironmentRecord } from '../types/index.js';
+import { promises as fs } from "fs";
+import { dirname } from "path";
+import { homedir } from "os";
+import { Config, ConfigSchema, EnvironmentRecord } from "../types/index.js";
+
+function expandPath(path: string): string {
+  if (path.startsWith("~/")) {
+    return path.replace("~", homedir());
+  }
+  return path;
+}
 
 export class StateStore {
   private configPath: string;
   private config: Config | null = null;
 
-  constructor(configPath: string = '~/.sandman/config.json') {
-    this.configPath = configPath;
+  constructor(configPath: string = "~/.sandman/config.json") {
+    this.configPath = expandPath(configPath);
   }
 
   async load(): Promise<Config> {
     try {
-      const content = await fs.readFile(this.configPath, 'utf-8');
+      const content = await fs.readFile(this.configPath, "utf-8");
       const parsed = JSON.parse(content);
       this.config = ConfigSchema.parse(parsed);
       return this.config;
     } catch {
       this.config = {
-        version: '1.0.0',
+        version: "1.0.0",
         environments: {},
       };
       return this.config;
@@ -53,7 +61,7 @@ export class StateStore {
     return Object.values(config.environments);
   }
 
-  async setProvider(provider: 'aws' | 'gcp', region?: string): Promise<void> {
+  async setProvider(provider: "aws" | "gcp", region?: string): Promise<void> {
     const config = await this.load();
     config.provider = provider;
     if (region) {
@@ -62,7 +70,7 @@ export class StateStore {
     await this.save(config);
   }
 
-  async getProvider(): Promise<{ provider?: 'aws' | 'gcp'; region?: string }> {
+  async getProvider(): Promise<{ provider?: "aws" | "gcp"; region?: string }> {
     const config = await this.load();
     return {
       provider: config.provider,
