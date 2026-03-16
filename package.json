@@ -1,0 +1,53 @@
+{
+  "name": "sandman",
+  "version": "0.1.0",
+  "description": "Provision disposable cloud environments in seconds",
+  "main": "dist/index.js",
+  "type": "module",
+  "bin": {
+    "sandman": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\""
+  },
+  "keywords": [
+    "cloud",
+    "aws",
+    "gcp",
+    "sandbox",
+    "infrastructure",
+    "cli"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@aws-sdk/client-ec2": "^3.529.0",
+    "@aws-sdk/client-iam": "^3.529.0",
+    "@aws-sdk/client-s3": "^3.529.0",
+    "@aws-sdk/client-sts": "^3.529.0",
+    "@google-cloud/resource-manager": "^5.0.0",
+    "@google-cloud/billing": "^1.0.0",
+    "@google-cloud/service-usage": "^1.0.0",
+    "@google-cloud/storage": "^7.7.0",
+    "chalk": "^5.3.0",
+    "commander": "^12.0.0",
+    "ora": "^7.0.1",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "eslint": "^8.56.0",
+    "prettier": "^3.2.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
