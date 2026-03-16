@@ -1,15 +1,13 @@
-  ____              _      __  __                                                   _     
- |  _ \            | |    |  \/  |                                                 | |    
- | |_) | ___   ___ | | __ | \  / | __ _ _ __   __ _  __ _  ___ _ __ ___   ___ _ __ | |_   
- |  _ < / _ \ / _ \| |/ / | |\/| |/ _` | '_ \ / _` |/ _` |/ _ \ '_ ` _ \ / _ \ '_ \| __|  
- | |_) | (_) | (_) |   <  | |  | | (_| | | | | (_| | (_| |  __/ | | | | |  __/ | | | |_   
- |____/ \___/ \___/|_|\_\ |_|  |_|\__,_|_| |_|\__,_|\__, |\___|_| |_| |_|\___|_| |_|\__|  
-                                                        | |                                 
-                                                        |_|                                 
+   _____                 _                           
+  / ____|               | |                          
+ | (___   __ _ _ __   __| |_ __ ___   __ _ _ __      
+  \___ \ / _` | '_ \ / _` | '_ ` _ \ / _` | '_ \     
+  ____) | (_| | | | | (_| | | | | | | (_| | | | |    
+ |_____/ \__,_|_| |_|\__,_|_| |_| |_|\__,_|_| |_|    
 
 Provision disposable cloud environments in seconds.
 
-Sandman is an open-source CLI that automates the creation and destruction of temporary cloud environments on AWS and GCP.
+Sandman is an open-source CLI that creates disposable cloud environments for AWS and GCP in seconds.
 
 Perfect for:
 
