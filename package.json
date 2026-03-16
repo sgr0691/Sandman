@@ -7,13 +7,22 @@
   "bin": {
     "sandman": "./dist/index.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sgr0691/Sandman.git"
+  },
+  "homepage": "https://github.com/sgr0691/Sandman#readme",
+  "bugs": {
+    "url": "https://github.com/sgr0691/Sandman/issues"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint src --ext .ts",
-    "format": "prettier --write \"src/**/*.ts\""
+    "format": "prettier --write \"src/**/*.ts\"",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "cloud",

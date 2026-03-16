@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Source (we publish compiled JS, not TS)
+src/
+
+# Test & Dev
+*.test.ts
+vitest.config.ts
+tsconfig.json
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# Misc
+*.log
+.DS_Store
+coverage/
+.env
