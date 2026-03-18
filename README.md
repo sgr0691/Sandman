@@ -1,9 +1,10 @@
-   _____                 _                           
-  / ____|               | |                          
- | (___   __ _ _ __   __| |_ __ ___   __ _ _ __      
-  \___ \ / _` | '_ \ / _` | '_ ` _ \ / _` | '_ \     
-  ____) | (_| | | | | (_| | | | | | | (_| | | | |    
- |_____/ \__,_|_| |_|\__,_|_| |_| |_|\__,_|_| |_|    
+---
+
+/ \_**_| | |  
+ | (_** ** \_ \_ ** **| |\_ ** **\_ ** \_ _ **  
+ \_** \ / _` | '_ \ / _` | '_ ` _ \ / _` | '_ \  
+ \_**_) | (_| | | | | (_| | | | | | | (_| | | | |  
+ |\_\_\_**/ \__,_|_| |_|\__,_|_| |_| |\_|\__,_|_| |_|
 
 Provision disposable cloud environments in seconds.
 
@@ -28,16 +29,18 @@ Creating cloud infrastructure manually is slow.
 Even experienced engineers must:
 
 ### AWS
+
 • configure IAM  
 • create VPCs  
 • provision compute  
-• configure credentials  
+• configure credentials
 
 ### GCP
+
 • create a project  
 • connect billing  
 • enable APIs  
-• configure service accounts  
+• configure service accounts
 
 This can take **30–90 minutes**.
 
@@ -52,7 +55,7 @@ Sandman reduces that to **seconds**.
 • Billing configuration helpers  
 • Enable common cloud services  
 • Credential management  
-• Environment teardown  
+• Environment teardown
 
 Supported providers:
 
@@ -72,13 +75,13 @@ Future support:
 ### Using npm
 
 ```bash
-npm install -g sandman
+npm install -g @sgr0691/sandman
 ```
 
 Or run without installing:
 
 ```bash
-npx sandman
+npx @sgr0691/sandman
 ```
 
 ---
@@ -217,13 +220,13 @@ CLI
 ↓  
 Provisioning Engine  
 ↓  
-Cloud Provider APIs  
+Cloud Provider APIs
 
 Components:
 
-- CLI layer  
-- Provisioning engine  
-- Provider adapters  
+- CLI layer
+- Provisioning engine
+- Provider adapters
 
 ---
 
@@ -294,7 +297,7 @@ Planned features:
 • Environment templates  
 • Multi-cloud provisioning  
 • GitHub demo environments  
-• Local testing environments  
+• Local testing environments
 
 ---
 
