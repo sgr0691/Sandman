@@ -19,6 +19,7 @@ export const GCP_SERVICES: Record<string, string> = {
   iam: "iam.googleapis.com",
   pubsub: "pubsub.googleapis.com",
   container: "container.googleapis.com",
+  artifactregistry: "artifactregistry.googleapis.com",
 };
 
 export const AWS_SERVICES: Record<string, string> = {

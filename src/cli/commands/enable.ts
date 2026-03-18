@@ -7,7 +7,15 @@ import { GcpAdapter } from "../../providers/gcp/adapter.js";
 import { ProviderAdapter } from "../../providers/base.js";
 
 const VALID_SERVICES: Record<string, string[]> = {
-  gcp: ["compute", "storage", "cloudrun", "iam", "pubsub", "container"],
+  gcp: [
+    "compute",
+    "storage",
+    "cloudrun",
+    "iam",
+    "pubsub",
+    "container",
+    "artifactregistry",
+  ],
   aws: ["ec2", "s3", "lambda", "iam"],
 };
 

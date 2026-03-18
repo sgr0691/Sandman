@@ -23,6 +23,7 @@ export const ServiceName = z.enum([
   "iam",
   "pubsub",
   "container",
+  "artifactregistry",
 ]);
 
 export type ServiceName = z.infer<typeof ServiceName>;
