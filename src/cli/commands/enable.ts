@@ -1,20 +1,20 @@
-import chalk from 'chalk';
-import ora from 'ora';
-import { StateStore } from '../../core/state-store.js';
-import { ServiceName } from '../../types/index.js';
-import { AwsAdapter } from '../../providers/aws/adapter.js';
-import { GcpAdapter } from '../../providers/gcp/adapter.js';
-import { ProviderAdapter } from '../../providers/base.js';
+import chalk from "chalk";
+import ora from "ora";
+import { StateStore } from "../../core/state-store.js";
+import { ServiceName } from "../../types/index.js";
+import { AwsAdapter } from "../../providers/aws/adapter.js";
+import { GcpAdapter } from "../../providers/gcp/adapter.js";
+import { ProviderAdapter } from "../../providers/base.js";
 
 const VALID_SERVICES: Record<string, string[]> = {
-  gcp: ['compute', 'storage', 'cloudrun', 'iam'],
-  aws: ['ec2', 's3', 'lambda', 'iam'],
+  gcp: ["compute", "storage", "cloudrun", "iam", "pubsub", "container"],
+  aws: ["ec2", "s3", "lambda", "iam"],
 };
 
 export async function enableServices(
   servicesInput: ServiceName[],
   environmentName: string | undefined,
-  store: StateStore
+  store: StateStore,
 ): Promise<void> {
   let env;
 
@@ -26,13 +26,13 @@ export async function enableServices(
     }
   } else {
     const environments = await store.listEnvironments();
-    const active = environments.filter(e => e.status === 'active');
+    const active = environments.filter((e) => e.status === "active");
     if (active.length === 0) {
-      console.log(chalk.red('No active environments found.'));
+      console.log(chalk.red("No active environments found."));
       process.exit(1);
     }
     if (active.length > 1) {
-      console.log(chalk.yellow('Multiple environments found. Specify one:'));
+      console.log(chalk.yellow("Multiple environments found. Specify one:"));
       for (const e of active) {
         console.log(chalk.gray(`  - ${e.name}`));
       }
@@ -42,32 +42,35 @@ export async function enableServices(
   }
 
   const validServices = VALID_SERVICES[env.provider];
-  const invalid = servicesInput.filter(s => !validServices.includes(s));
-  
+  const invalid = servicesInput.filter((s) => !validServices.includes(s));
+
   if (invalid.length > 0) {
-    console.log(chalk.red(`Invalid services for ${env.provider}: ${invalid.join(', ')}`));
-    console.log(chalk.gray(`Valid services: ${validServices.join(', ')}`));
+    console.log(
+      chalk.red(`Invalid services for ${env.provider}: ${invalid.join(", ")}`),
+    );
+    console.log(chalk.gray(`Valid services: ${validServices.join(", ")}`));
     process.exit(1);
   }
 
   const spinner = ora(`Enabling services on ${env.name}...`).start();
 
   try {
-    const adapter: ProviderAdapter = env.provider === 'aws' 
-      ? new AwsAdapter() 
-      : new GcpAdapter();
-    
+    const adapter: ProviderAdapter =
+      env.provider === "aws" ? new AwsAdapter() : new GcpAdapter();
+
     await adapter.enableServices(env, servicesInput);
 
     const now = new Date().toISOString();
     env.services = [...new Set([...env.services, ...servicesInput])];
     env.updatedAt = now;
-    
+
     await store.saveEnvironment(env);
 
-    spinner.succeed(chalk.green(`✓ Services enabled: ${servicesInput.join(', ')}`));
+    spinner.succeed(
+      chalk.green(`✓ Services enabled: ${servicesInput.join(", ")}`),
+    );
   } catch (error: any) {
-    spinner.fail(chalk.red('Failed to enable services'));
+    spinner.fail(chalk.red("Failed to enable services"));
     console.log(chalk.red(`Error: ${error.message}`));
     process.exit(1);
   }
