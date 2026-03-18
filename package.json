@@ -7,6 +7,11 @@
   "bin": {
     "sandman": "./dist/index.js"
   },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/sgr0691/Sandman.git"
@@ -22,7 +27,7 @@
     "test:watch": "vitest",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build && npm test"
   },
   "keywords": [
     "cloud",
@@ -30,9 +35,14 @@
     "gcp",
     "sandbox",
     "infrastructure",
-    "cli"
+    "cli",
+    "devtools",
+    "provisioning"
   ],
-  "author": "",
+  "author": {
+    "name": "Sergio",
+    "url": "https://github.com/sgr0691"
+  },
   "license": "MIT",
   "dependencies": {
     "@aws-sdk/client-ec2": "^3.529.0",
