@@ -1,5 +1,5 @@
 {
-  "name": "@sgr0691/sandman",
+  "name": "@itssergio91/sandman",
   "version": "0.1.0",
   "description": "Provision disposable cloud environments in seconds",
   "main": "dist/index.js",

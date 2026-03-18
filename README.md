@@ -75,13 +75,13 @@ Future support:
 ### Using npm
 
 ```bash
-npm install -g @sgr0691/sandman
+npm install -g @itssergio91/sandman
 ```
 
 Or run without installing:
 
 ```bash
-npx @sgr0691/sandman
+npx @itssergio91/sandman
 ```
 
 ---
