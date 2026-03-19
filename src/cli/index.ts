@@ -8,6 +8,7 @@ import { createEnvironment } from './commands/create.js';
 import { enableServices } from './commands/enable.js';
 import { connectEnvironment } from './commands/connect.js';
 import { destroyEnvironment } from './commands/destroy.js';
+import { ProviderType } from '../types/index.js';
 
 const program = new Command();
 const store = new StateStore();
@@ -20,25 +21,27 @@ program
 program
   .command('init')
   .description('Initialize a cloud provider')
-  .argument('<provider>', 'Provider to initialize (aws or gcp)')
+  .argument('<provider>', 'Provider to initialize: aws | gcp | cloudflare | vercel')
   .option('-r, --region <region>', 'Default region')
-  .action(async (provider: string, options: { region?: string }) => {
-    await initProvider(provider as 'aws' | 'gcp', options.region, store);
+  .option('--json', 'Output as JSON')
+  .action(async (provider: string, options: { region?: string; json?: boolean }) => {
+    await initProvider(provider as ProviderType, options.region, store, { json: options.json });
   });
 
 program
   .command('create')
   .description('Create a sandbox environment')
   .argument('<name>', 'Environment name')
-  .option('-p, --provider <provider>', 'Cloud provider (aws or gcp)')
+  .option('-p, --provider <provider>', 'Cloud provider: aws | gcp | cloudflare | vercel')
   .option('-r, --region <region>', 'Region')
   .option('--dry-run', 'Preview actions without executing')
-  .action(async (name: string, options: { provider?: string; region?: string; dryRun?: boolean }) => {
+  .option('--json', 'Output as JSON')
+  .action(async (name: string, options: { provider?: string; region?: string; dryRun?: boolean; json?: boolean }) => {
     await createEnvironment(
       name,
-      { provider: options.provider as 'aws' | 'gcp', region: options.region },
+      { provider: options.provider as ProviderType, region: options.region },
       store,
-      { dryRun: options.dryRun }
+      { dryRun: options.dryRun, json: options.json }
     );
   });
 
@@ -47,8 +50,9 @@ program
   .description('Enable services for an environment')
   .argument('<services...>', 'Services to enable')
   .option('-e, --environment <name>', 'Environment name')
-  .action(async (services: string[], options: { environment?: string }) => {
-    await enableServices(services as any[], options.environment, store);
+  .option('--json', 'Output as JSON')
+  .action(async (services: string[], options: { environment?: string; json?: boolean }) => {
+    await enableServices(services as any[], options.environment, store, { json: options.json });
   });
 
 program
@@ -70,10 +74,11 @@ program
 
 program
   .command('connect')
-  .description('Connect to an environment')
+  .description('Connect to an environment and output credentials')
   .argument('<name>', 'Environment name')
-  .action(async (name: string) => {
-    await connectEnvironment(name, store);
+  .option('--json', 'Output as JSON')
+  .action(async (name: string, options: { json?: boolean }) => {
+    await connectEnvironment(name, store, options);
   });
 
 program
@@ -81,8 +86,9 @@ program
   .description('Destroy an environment')
   .argument('<name>', 'Environment name')
   .option('-y, --yes', 'Skip confirmation')
-  .action(async (name: string, options: { yes?: boolean }) => {
-    await destroyEnvironment(name, store, { confirmed: options.yes ?? false });
+  .option('--json', 'Output as JSON')
+  .action(async (name: string, options: { yes?: boolean; json?: boolean }) => {
+    await destroyEnvironment(name, store, { confirmed: options.yes ?? false, json: options.json });
   });
 
 export { program, store };
