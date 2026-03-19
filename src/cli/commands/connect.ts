@@ -1,24 +1,11 @@
 import chalk from 'chalk';
 import ora from 'ora';
 import { StateStore } from '../../core/state-store.js';
-import { AwsAdapter } from '../../providers/aws/adapter.js';
-import { GcpAdapter } from '../../providers/gcp/adapter.js';
-import { CloudflareAdapter } from '../../providers/cloudflare/adapter.js';
-import { VercelAdapter } from '../../providers/vercel/adapter.js';
-import { ProviderAdapter } from '../../providers/base.js';
 import { ProviderType } from '../../types/index.js';
+import { getAdapter } from '../../providers/index.js';
 
 interface ConnectOptions {
   json?: boolean;
-}
-
-function getAdapter(providerType: ProviderType): ProviderAdapter {
-  switch (providerType) {
-    case 'aws': return new AwsAdapter();
-    case 'gcp': return new GcpAdapter();
-    case 'cloudflare': return new CloudflareAdapter();
-    case 'vercel': return new VercelAdapter();
-  }
 }
 
 export async function connectEnvironment(

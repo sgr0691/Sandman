@@ -74,8 +74,8 @@ export class VercelAdapter implements ProviderAdapter {
     if (env.projectId) {
       result.VERCEL_PROJECT_NAME = env.projectId;
     }
-    if (this.teamId) {
-      result.VERCEL_TEAM_ID = this.teamId;
+    if (process.env.VERCEL_TEAM_ID) {
+      result.VERCEL_TEAM_ID = process.env.VERCEL_TEAM_ID;
     }
 
     return result;

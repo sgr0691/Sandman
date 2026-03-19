@@ -58,7 +58,7 @@ export class CloudflareAdapter implements ProviderAdapter {
     return {
       name,
       provider: "cloudflare",
-      accountId: this.accountId || undefined,
+      accountId: process.env.CLOUDFLARE_ACCOUNT_ID || undefined,
       status: "active",
       services: [],
       resources: {
