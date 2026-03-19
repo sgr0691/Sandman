@@ -28,3 +28,19 @@ export const AWS_SERVICES: Record<string, string> = {
   lambda: "lambda",
   iam: "iam",
 };
+
+export const CLOUDFLARE_SERVICES: Record<string, string> = {
+  workers: "workers",
+  pages: "pages",
+  r2: "r2",
+  kv: "kv",
+  d1: "d1",
+  "durable-objects": "durable-objects",
+};
+
+export const VERCEL_SERVICES: Record<string, string> = {
+  functions: "functions",
+  edge: "edge",
+  blob: "blob",
+  postgres: "postgres",
+};

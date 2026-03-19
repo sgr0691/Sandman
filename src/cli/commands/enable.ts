@@ -4,31 +4,46 @@ import { StateStore } from "../../core/state-store.js";
 import { ServiceName } from "../../types/index.js";
 import { AwsAdapter } from "../../providers/aws/adapter.js";
 import { GcpAdapter } from "../../providers/gcp/adapter.js";
+import { CloudflareAdapter } from "../../providers/cloudflare/adapter.js";
+import { VercelAdapter } from "../../providers/vercel/adapter.js";
 import { ProviderAdapter } from "../../providers/base.js";
+import { ProviderType } from "../../types/index.js";
 
 const VALID_SERVICES: Record<string, string[]> = {
-  gcp: [
-    "compute",
-    "storage",
-    "cloudrun",
-    "iam",
-    "pubsub",
-    "container",
-    "artifactregistry",
-  ],
+  gcp: ["compute", "storage", "cloudrun", "iam", "pubsub", "container", "artifactregistry"],
   aws: ["ec2", "s3", "lambda", "iam"],
+  cloudflare: ["workers", "pages", "r2", "kv", "d1", "durable-objects"],
+  vercel: ["functions", "edge", "blob", "postgres"],
 };
+
+interface EnableOptions {
+  json?: boolean;
+}
+
+function getAdapter(providerType: ProviderType): ProviderAdapter {
+  switch (providerType) {
+    case 'aws': return new AwsAdapter();
+    case 'gcp': return new GcpAdapter();
+    case 'cloudflare': return new CloudflareAdapter();
+    case 'vercel': return new VercelAdapter();
+  }
+}
 
 export async function enableServices(
   servicesInput: ServiceName[],
   environmentName: string | undefined,
   store: StateStore,
+  options: EnableOptions = {}
 ): Promise<void> {
   let env;
 
   if (environmentName) {
     env = await store.getEnvironment(environmentName);
     if (!env) {
+      if (options.json) {
+        console.log(JSON.stringify({ success: false, error: `Environment "${environmentName}" not found.` }));
+        process.exit(1);
+      }
       console.log(chalk.red(`Environment "${environmentName}" not found.`));
       process.exit(1);
     }
@@ -36,10 +51,18 @@ export async function enableServices(
     const environments = await store.listEnvironments();
     const active = environments.filter((e) => e.status === "active");
     if (active.length === 0) {
+      if (options.json) {
+        console.log(JSON.stringify({ success: false, error: "No active environments found." }));
+        process.exit(1);
+      }
       console.log(chalk.red("No active environments found."));
       process.exit(1);
     }
     if (active.length > 1) {
+      if (options.json) {
+        console.log(JSON.stringify({ success: false, error: "Multiple environments found. Specify one with -e.", environments: active.map(e => e.name) }));
+        process.exit(1);
+      }
       console.log(chalk.yellow("Multiple environments found. Specify one:"));
       for (const e of active) {
         console.log(chalk.gray(`  - ${e.name}`));
@@ -53,19 +76,19 @@ export async function enableServices(
   const invalid = servicesInput.filter((s) => !validServices.includes(s));
 
   if (invalid.length > 0) {
-    console.log(
-      chalk.red(`Invalid services for ${env.provider}: ${invalid.join(", ")}`),
-    );
+    if (options.json) {
+      console.log(JSON.stringify({ success: false, error: `Invalid services for ${env.provider}: ${invalid.join(", ")}`, validServices }));
+      process.exit(1);
+    }
+    console.log(chalk.red(`Invalid services for ${env.provider}: ${invalid.join(", ")}`));
     console.log(chalk.gray(`Valid services: ${validServices.join(", ")}`));
     process.exit(1);
   }
 
-  const spinner = ora(`Enabling services on ${env.name}...`).start();
+  const spinner = options.json ? null : ora(`Enabling services on ${env.name}...`).start();
 
   try {
-    const adapter: ProviderAdapter =
-      env.provider === "aws" ? new AwsAdapter() : new GcpAdapter();
-
+    const adapter = getAdapter(env.provider as ProviderType);
     await adapter.enableServices(env, servicesInput);
 
     const now = new Date().toISOString();
@@ -74,11 +97,18 @@ export async function enableServices(
 
     await store.saveEnvironment(env);
 
-    spinner.succeed(
-      chalk.green(`✓ Services enabled: ${servicesInput.join(", ")}`),
-    );
+    if (options.json) {
+      console.log(JSON.stringify({ success: true, environment: env.name, services: env.services }));
+      return;
+    }
+
+    spinner!.succeed(chalk.green(`✓ Services enabled: ${servicesInput.join(", ")}`));
   } catch (error: any) {
-    spinner.fail(chalk.red("Failed to enable services"));
+    if (options.json) {
+      console.log(JSON.stringify({ success: false, error: error.message }));
+      process.exit(1);
+    }
+    spinner!.fail(chalk.red("Failed to enable services"));
     console.log(chalk.red(`Error: ${error.message}`));
     process.exit(1);
   }

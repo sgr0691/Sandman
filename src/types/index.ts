@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const ProviderType = z.enum(["aws", "gcp"]);
+export const ProviderType = z.enum(["aws", "gcp", "cloudflare", "vercel"]);
 
 export type ProviderType = z.infer<typeof ProviderType>;
 
@@ -14,16 +14,30 @@ export const EnvironmentStatus = z.enum([
 export type EnvironmentStatus = z.infer<typeof EnvironmentStatus>;
 
 export const ServiceName = z.enum([
+  // GCP
   "compute",
   "storage",
   "cloudrun",
-  "lambda",
-  "ec2",
-  "s3",
   "iam",
   "pubsub",
   "container",
   "artifactregistry",
+  // AWS
+  "lambda",
+  "ec2",
+  "s3",
+  // Cloudflare
+  "workers",
+  "pages",
+  "r2",
+  "kv",
+  "d1",
+  "durable-objects",
+  // Vercel
+  "functions",
+  "edge",
+  "blob",
+  "postgres",
 ]);
 
 export type ServiceName = z.infer<typeof ServiceName>;
