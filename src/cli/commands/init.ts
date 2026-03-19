@@ -33,7 +33,7 @@ export async function initProvider(
     const adapter = getAdapter(providerType);
     await adapter.init();
 
-    await store.setProvider(providerType, region);
+    await store.setProvider(providerType as any, region);
 
     if (options.json) {
       console.log(JSON.stringify({ success: true, provider: providerType, region: region || null }));
