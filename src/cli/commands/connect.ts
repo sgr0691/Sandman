@@ -61,29 +61,6 @@ export async function connectEnvironment(
       }
       console.log(chalk.gray('\n# Use with AWS CLI:'));
       console.log(chalk.cyan('aws configure'));
-    } else if (env.provider === 'cloudflare') {
-      console.log(chalk.gray('# Cloudflare Configuration'));
-      if (credentials.CLOUDFLARE_ACCOUNT_ID) {
-        console.log(`export CLOUDFLARE_ACCOUNT_ID=${credentials.CLOUDFLARE_ACCOUNT_ID}`);
-      }
-      if (credentials.CLOUDFLARE_API_TOKEN) {
-        console.log(`export CLOUDFLARE_API_TOKEN=${credentials.CLOUDFLARE_API_TOKEN}`);
-      }
-      console.log(chalk.gray('\n# Use with Wrangler:'));
-      console.log(chalk.cyan('wrangler whoami'));
-    } else if (env.provider === 'vercel') {
-      console.log(chalk.gray('# Vercel Configuration'));
-      if (credentials.VERCEL_TOKEN) {
-        console.log(`export VERCEL_TOKEN=${credentials.VERCEL_TOKEN}`);
-      }
-      if (credentials.VERCEL_PROJECT_NAME) {
-        console.log(`export VERCEL_PROJECT_NAME=${credentials.VERCEL_PROJECT_NAME}`);
-      }
-      if (credentials.VERCEL_TEAM_ID) {
-        console.log(`export VERCEL_TEAM_ID=${credentials.VERCEL_TEAM_ID}`);
-      }
-      console.log(chalk.gray('\n# Use with Vercel CLI:'));
-      console.log(chalk.cyan('vercel whoami'));
     }
 
     console.log(chalk.gray('\n# Copy to .env:'));

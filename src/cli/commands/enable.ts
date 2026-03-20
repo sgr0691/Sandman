@@ -7,8 +7,6 @@ import { getAdapter } from "../../providers/index.js";
 const VALID_SERVICES: Record<string, string[]> = {
   gcp: ["compute", "storage", "cloudrun", "iam", "pubsub", "container", "artifactregistry"],
   aws: ["ec2", "s3", "lambda", "iam"],
-  cloudflare: ["workers", "pages", "r2", "kv", "d1", "durable-objects"],
-  vercel: ["functions", "edge", "blob", "postgres"],
 };
 
 interface EnableOptions {

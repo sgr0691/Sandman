@@ -1,7 +1,12 @@
 import { promises as fs } from "fs";
 import { dirname } from "path";
 import { homedir } from "os";
-import { Config, ConfigSchema, EnvironmentRecord } from "../types/index.js";
+import {
+  Config,
+  ConfigSchema,
+  EnvironmentRecord,
+  ProviderType,
+} from "../types/index.js";
 
 function expandPath(path: string): string {
   if (path.startsWith("~/")) {
@@ -61,7 +66,7 @@ export class StateStore {
     return Object.values(config.environments);
   }
 
-  async setProvider(provider: "aws" | "gcp", region?: string): Promise<void> {
+  async setProvider(provider: ProviderType, region?: string): Promise<void> {
     const config = await this.load();
     config.provider = provider;
     if (region) {
@@ -70,7 +75,7 @@ export class StateStore {
     await this.save(config);
   }
 
-  async getProvider(): Promise<{ provider?: "aws" | "gcp"; region?: string }> {
+  async getProvider(): Promise<{ provider?: ProviderType; region?: string }> {
     const config = await this.load();
     return {
       provider: config.provider,

@@ -24,7 +24,7 @@ export async function createEnvironment(
       process.exit(1);
     }
     console.log(chalk.red('Error: No provider specified.'));
-    console.log(chalk.gray('Run "sandman init aws", "sandman init gcp", "sandman init cloudflare", or "sandman init vercel" first.'));
+    console.log(chalk.gray('Run "sandman init aws" or "sandman init gcp" first.'));
     process.exit(1);
   }
 

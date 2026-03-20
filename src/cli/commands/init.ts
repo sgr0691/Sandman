@@ -33,12 +33,6 @@ export async function initProvider(
     if (providerType === 'gcp') {
       console.log(chalk.cyan('\n→ Run "sandman create <name>" to create an environment'));
     }
-    if (providerType === 'cloudflare') {
-      console.log(chalk.cyan('\n→ Run "sandman create <name>" to create an environment'));
-    }
-    if (providerType === 'vercel') {
-      console.log(chalk.cyan('\n→ Run "sandman create <name>" to create an environment'));
-    }
   } catch (error: any) {
     if (options.json) {
       console.log(JSON.stringify({ success: false, provider: providerType, error: error.message }));

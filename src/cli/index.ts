@@ -21,7 +21,7 @@ program
 program
   .command('init')
   .description('Initialize a cloud provider')
-  .argument('<provider>', 'Provider to initialize: aws | gcp | cloudflare | vercel')
+  .argument('<provider>', 'Provider to initialize: aws | gcp')
   .option('-r, --region <region>', 'Default region')
   .option('--json', 'Output as JSON')
   .action(async (provider: string, options: { region?: string; json?: boolean }) => {
@@ -32,7 +32,7 @@ program
   .command('create')
   .description('Create a sandbox environment')
   .argument('<name>', 'Environment name')
-  .option('-p, --provider <provider>', 'Cloud provider: aws | gcp | cloudflare | vercel')
+  .option('-p, --provider <provider>', 'Cloud provider: aws | gcp')
   .option('-r, --region <region>', 'Region')
   .option('--dry-run', 'Preview actions without executing')
   .option('--json', 'Output as JSON')
