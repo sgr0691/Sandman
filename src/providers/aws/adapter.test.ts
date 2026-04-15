@@ -2,6 +2,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { AwsAdapter } from "./adapter.js";
 import { ServiceName } from "../../types/index.js";
 
+// Mock IDs for AWS resources
+const MOCK_VPC_ID = "vpc-1234567890abcdef0";
+const MOCK_SUBNET_ID = "subnet-1234567890abcdef0";
+const MOCK_IGW_ID = "igw-1234567890abcdef0";
+const MOCK_RT_ID = "rtb-1234567890abcdef0";
+const MOCK_INSTANCE_ID = "i-1234567890abcdef0";
+const MOCK_ROLE_NAME = "sandman-test-role";
+const MOCK_INSTANCE_PROFILE_NAME = "sandman-test-profile";
+const MOCK_SG_ID = "sg-1234567890abcdef0";
+
 vi.mock("@aws-sdk/client-sts", () => ({
   STSClient: vi.fn().mockImplementation(() => ({
     send: vi.fn().mockResolvedValue({
@@ -20,6 +30,106 @@ vi.mock("@aws-sdk/client-s3", () => ({
   DeleteBucketCommand: vi.fn().mockImplementation(() => ({})),
   ListObjectsV2Command: vi.fn().mockImplementation(() => ({ Contents: [] })),
   DeleteObjectsCommand: vi.fn().mockImplementation(() => ({})),
+}));
+
+vi.mock("@aws-sdk/client-ec2", () => ({
+  EC2Client: vi.fn().mockImplementation(() => ({
+    send: vi.fn().mockImplementation((command: any) => {
+      const commandName = command.constructor.name;
+      switch (commandName) {
+        case "CreateVpcCommand":
+          return Promise.resolve({ Vpc: { VpcId: MOCK_VPC_ID } });
+        case "CreateSubnetCommand":
+          return Promise.resolve({ Subnet: { SubnetId: MOCK_SUBNET_ID } });
+        case "CreateInternetGatewayCommand":
+          return Promise.resolve({
+            InternetGateway: { InternetGatewayId: MOCK_IGW_ID },
+          });
+        case "AttachInternetGatewayCommand":
+          return Promise.resolve({});
+        case "CreateRouteTableCommand":
+          return Promise.resolve({ RouteTable: { RouteTableId: MOCK_RT_ID } });
+        case "CreateRouteCommand":
+          return Promise.resolve({});
+        case "AssociateRouteTableCommand":
+          return Promise.resolve({});
+        case "CreateSecurityGroupCommand":
+          return Promise.resolve({ GroupId: MOCK_SG_ID });
+        case "AuthorizeSecurityGroupIngressCommand":
+          return Promise.resolve({});
+        case "RunInstancesCommand":
+          return Promise.resolve({
+            Instances: [{ InstanceId: MOCK_INSTANCE_ID }],
+          });
+        case "DeleteVpcCommand":
+        case "DeleteSubnetCommand":
+        case "DeleteInternetGatewayCommand":
+        case "DetachInternetGatewayCommand":
+        case "DeleteRouteTableCommand":
+        case "DeleteSecurityGroupCommand":
+        case "TerminateInstancesCommand":
+          return Promise.resolve({});
+        default:
+          return Promise.resolve({});
+      }
+    }),
+  })),
+  CreateVpcCommand: vi.fn().mockImplementation(() => ({})),
+  CreateSubnetCommand: vi.fn().mockImplementation(() => ({})),
+  CreateInternetGatewayCommand: vi.fn().mockImplementation(() => ({})),
+  AttachInternetGatewayCommand: vi.fn().mockImplementation(() => ({})),
+  CreateRouteTableCommand: vi.fn().mockImplementation(() => ({})),
+  CreateRouteCommand: vi.fn().mockImplementation(() => ({})),
+  AssociateRouteTableCommand: vi.fn().mockImplementation(() => ({})),
+  CreateSecurityGroupCommand: vi.fn().mockImplementation(() => ({})),
+  AuthorizeSecurityGroupIngressCommand: vi.fn().mockImplementation(() => ({})),
+  RunInstancesCommand: vi.fn().mockImplementation(() => ({})),
+  DeleteVpcCommand: vi.fn().mockImplementation(() => ({})),
+  DeleteSubnetCommand: vi.fn().mockImplementation(() => ({})),
+  DeleteInternetGatewayCommand: vi.fn().mockImplementation(() => ({})),
+  DetachInternetGatewayCommand: vi.fn().mockImplementation(() => ({})),
+  DeleteRouteTableCommand: vi.fn().mockImplementation(() => ({})),
+  DeleteSecurityGroupCommand: vi.fn().mockImplementation(() => ({})),
+  TerminateInstancesCommand: vi.fn().mockImplementation(() => ({})),
+}));
+
+vi.mock("@aws-sdk/client-iam", () => ({
+  IAMClient: vi.fn().mockImplementation(() => ({
+    send: vi.fn().mockImplementation((command: any) => {
+      const commandName = command.constructor.name;
+      switch (commandName) {
+        case "CreateRoleCommand":
+          return Promise.resolve({
+            Role: { Arn: `arn:aws:iam::123456789012:role/${MOCK_ROLE_NAME}` },
+          });
+        case "AttachRolePolicyCommand":
+          return Promise.resolve({});
+        case "CreateInstanceProfileCommand":
+          return Promise.resolve({
+            InstanceProfile: {
+              Arn: `arn:aws:iam::123456789012:instance-profile/${MOCK_INSTANCE_PROFILE_NAME}`,
+            },
+          });
+        case "AddRoleToInstanceProfileCommand":
+          return Promise.resolve({});
+        case "DeleteRoleCommand":
+        case "DetachRolePolicyCommand":
+        case "DeleteInstanceProfileCommand":
+        case "RemoveRoleFromInstanceProfileCommand":
+          return Promise.resolve({});
+        default:
+          return Promise.resolve({});
+      }
+    }),
+  })),
+  CreateRoleCommand: vi.fn().mockImplementation(() => ({})),
+  AttachRolePolicyCommand: vi.fn().mockImplementation(() => ({})),
+  CreateInstanceProfileCommand: vi.fn().mockImplementation(() => ({})),
+  AddRoleToInstanceProfileCommand: vi.fn().mockImplementation(() => ({})),
+  DeleteRoleCommand: vi.fn().mockImplementation(() => ({})),
+  DetachRolePolicyCommand: vi.fn().mockImplementation(() => ({})),
+  DeleteInstanceProfileCommand: vi.fn().mockImplementation(() => ({})),
+  RemoveRoleFromInstanceProfileCommand: vi.fn().mockImplementation(() => ({})),
 }));
 
 describe("AwsAdapter", () => {
