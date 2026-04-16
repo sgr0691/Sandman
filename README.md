@@ -12,8 +12,6 @@ Provision disposable cloud environments in seconds.
 
 Sandman is an open-source CLI that creates disposable cloud environments for AWS and GCP in seconds.
 
-**One-line repo description:** Sandman is a CLI for spinning up disposable AWS and GCP environments in seconds.
-
 Perfect for:
 
 - DevTool demos
