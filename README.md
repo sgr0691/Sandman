@@ -1,14 +1,18 @@
----
+# Sandman
 
-/ \_**_| | |  
- | (_** ** \_ \_ ** **| |\_ ** **\_ ** \_ _ **  
- \_** \ / _` | '_ \ / _` | '_ ` _ \ / _` | '_ \  
- \_**_) | (_| | | | | (_| | | | | | | (_| | | | |  
- |\_\_\_**/ \__,_|_| |_|\__,_|_| |_| |\_|\__,_|_| |_|
+```text
+  ____                 _
+ / ___| __ _ _ __   __| |_ __ ___   __ _ _ __
+| |  _ / _` | '_ \ / _` | '_ ` _ \ / _` | '_ \
+| |_| | (_| | | | | (_| | | | | | | (_| | | | |
+ \____|\__,_|_| |_|\__,_|_| |_| |_|\__,_|_| |_|
+```
 
 Provision disposable cloud environments in seconds.
 
 Sandman is an open-source CLI that creates disposable cloud environments for AWS and GCP in seconds.
+
+**One-line repo description:** Sandman is a CLI for spinning up disposable AWS and GCP environments in seconds.
 
 Perfect for:
 
