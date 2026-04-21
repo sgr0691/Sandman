@@ -100,15 +100,15 @@ Or write the file directly using the content from this project's `.cursor/rules/
 
 ### GitHub Copilot — `.github/copilot-instructions.md`
 
+**Note**: If `.github/copilot-instructions.md` already exists with other content, append the Sandman section rather than overwriting. Check first:
+```bash
+cat .github/copilot-instructions.md 2>/dev/null
+```
+
 ```bash
 mkdir -p .github
 curl -fsSL https://raw.githubusercontent.com/sgr0691/sandman/main/.github/copilot-instructions.md \
   -o .github/copilot-instructions.md
-```
-
-**Note**: If `.github/copilot-instructions.md` already exists with other content, append the Sandman section rather than overwriting. Check first:
-```bash
-cat .github/copilot-instructions.md 2>/dev/null
 ```
 
 ---
