@@ -108,7 +108,7 @@ sandman create <name> --provider <provider> --dry-run --json
 
 ### Step 6 — Enable services
 ```bash
-sandman enable <service1> <service2> --environment <name> --json
+sandman enable <service1> <service2> -e <name> --json
 ```
 
 ### Step 7 — Output connection info

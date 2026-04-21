@@ -53,7 +53,7 @@ sandman init <provider> --json
 sandman create <name> --provider <provider> --json
 
 # 4. Enable required services
-sandman enable <service1> <service2> --environment <name> --json
+sandman enable <service1> <service2> -e <name> --json
 
 # 5. Get connection credentials
 sandman connect <name> --json

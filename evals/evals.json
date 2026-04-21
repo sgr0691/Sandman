@@ -25,9 +25,9 @@
   },
   {
     "id": "trigger-05",
-    "query": "What's the status of my dev environment?",
+    "query": "What's the status of my sandman dev environment?",
     "should_trigger": true,
-    "notes": "Status check — implicit Sandman context"
+    "notes": "Status check — explicit Sandman context"
   },
   {
     "id": "trigger-06",

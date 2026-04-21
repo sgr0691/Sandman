@@ -83,6 +83,11 @@ Or write the file directly using the content from this project's `.claude/comman
 
 ### Cursor — `.cursor/rules/sandman.mdc`
 
+**Note**: If `.cursor/rules/sandman.mdc` already exists, check its contents before overwriting:
+```bash
+cat .cursor/rules/sandman.mdc 2>/dev/null
+```
+
 ```bash
 mkdir -p .cursor/rules
 curl -fsSL https://raw.githubusercontent.com/sgr0691/sandman/main/.cursor/rules/sandman.mdc \
@@ -109,6 +114,11 @@ cat .github/copilot-instructions.md 2>/dev/null
 ---
 
 ### Windsurf — `.windsurf/rules/sandman.md`
+
+**Note**: If `.windsurf/rules/sandman.md` already exists, check its contents before overwriting:
+```bash
+cat .windsurf/rules/sandman.md 2>/dev/null
+```
 
 ```bash
 mkdir -p .windsurf/rules
