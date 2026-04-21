@@ -8,6 +8,8 @@ import { createEnvironment } from './commands/create.js';
 import { enableServices } from './commands/enable.js';
 import { connectEnvironment } from './commands/connect.js';
 import { destroyEnvironment } from './commands/destroy.js';
+import { doctorCheck } from './commands/doctor.js';
+import { cleanupEnvironments } from './commands/cleanup.js';
 import { ProviderType } from '../types/index.js';
 
 const program = new Command();
@@ -89,6 +91,30 @@ program
   .option('--json', 'Output as JSON')
   .action(async (name: string, options: { yes?: boolean; json?: boolean }) => {
     await destroyEnvironment(name, store, { confirmed: options.yes ?? false, json: options.json });
+  });
+
+program
+  .command('doctor')
+  .description('Validate credentials and configuration health')
+  .option('--json', 'Output as JSON')
+  .action(async (options: { json?: boolean }) => {
+    await doctorCheck(store, options);
+  });
+
+program
+  .command('cleanup')
+  .description('Destroy environments matching a filter')
+  .option('--older-than <duration>', 'Destroy environments older than this (e.g. 24h, 7d, 30m)')
+  .option('-y, --yes', 'Skip confirmation')
+  .option('--dry-run', 'Preview which environments would be destroyed')
+  .option('--json', 'Output as JSON')
+  .action(async (options: { olderThan?: string; yes?: boolean; dryRun?: boolean; json?: boolean }) => {
+    await cleanupEnvironments(store, {
+      olderThan: options.olderThan,
+      yes: options.yes,
+      dryRun: options.dryRun,
+      json: options.json,
+    });
   });
 
 export { program, store };
