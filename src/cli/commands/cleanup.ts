@@ -17,6 +17,9 @@ function parseDuration(input: string): number {
     throw new Error(`Invalid duration "${input}". Use a number followed by m, h, or d (e.g. 30m, 24h, 7d)`);
   }
   const value = parseFloat(match[1]);
+  if (value <= 0) {
+    throw new Error(`Duration must be greater than zero (got "${input}")`);
+  }
   const unit = match[2].toLowerCase();
   const msPerUnit: Record<string, number> = { m: 60_000, h: 3_600_000, d: 86_400_000 };
   return value * msPerUnit[unit];
