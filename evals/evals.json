@@ -1,0 +1,122 @@
+[
+  {
+    "id": "trigger-01",
+    "query": "Set up an AWS environment with S3 and Lambda for my demo",
+    "should_trigger": true,
+    "notes": "Core use case — provider + services specified"
+  },
+  {
+    "id": "trigger-02",
+    "query": "Spin up a Cloudflare sandbox with Workers and KV store",
+    "should_trigger": true,
+    "notes": "Cloudflare provider with explicit services"
+  },
+  {
+    "id": "trigger-03",
+    "query": "Create a disposable GCP environment with Cloud Run and Artifact Registry",
+    "should_trigger": true,
+    "notes": "GCP provider + services"
+  },
+  {
+    "id": "trigger-04",
+    "query": "Show me all my Sandman environments",
+    "should_trigger": true,
+    "notes": "List action — explicit Sandman mention"
+  },
+  {
+    "id": "trigger-05",
+    "query": "What's the status of my sandman dev environment?",
+    "should_trigger": true,
+    "notes": "Status check — explicit Sandman context"
+  },
+  {
+    "id": "trigger-06",
+    "query": "Tear down my test sandbox, I'm done with it",
+    "should_trigger": true,
+    "notes": "Destroy action"
+  },
+  {
+    "id": "trigger-07",
+    "query": "Get me credentials for my vercel-demo environment",
+    "should_trigger": true,
+    "notes": "Connect / credentials retrieval"
+  },
+  {
+    "id": "trigger-08",
+    "query": "I need a temporary cloud environment to test my API against real S3",
+    "should_trigger": true,
+    "notes": "Implicit Sandman request — disposable environment for testing"
+  },
+  {
+    "id": "trigger-09",
+    "query": "Provision a Vercel project with Postgres and blob storage for our hackathon",
+    "should_trigger": true,
+    "notes": "Vercel provider with services"
+  },
+  {
+    "id": "trigger-10",
+    "query": "Preview what sandman would create for an AWS environment without actually doing it",
+    "should_trigger": true,
+    "notes": "Dry-run workflow"
+  },
+  {
+    "id": "no-trigger-01",
+    "query": "How do I write a React component that fetches data from an API?",
+    "should_trigger": false,
+    "notes": "Frontend question, no cloud infra intent"
+  },
+  {
+    "id": "no-trigger-02",
+    "query": "Fix the TypeScript type error on line 42 of my adapter file",
+    "should_trigger": false,
+    "notes": "Code editing task, not infrastructure"
+  },
+  {
+    "id": "no-trigger-03",
+    "query": "How do I configure ESLint for this project?",
+    "should_trigger": false,
+    "notes": "Tooling config, not cloud infra"
+  },
+  {
+    "id": "no-trigger-04",
+    "query": "Deploy my Next.js app to Vercel using the Vercel CLI",
+    "should_trigger": false,
+    "notes": "Direct Vercel CLI deployment — not Sandman sandboxing"
+  },
+  {
+    "id": "no-trigger-05",
+    "query": "Help me write a GitHub Actions workflow that uploads to S3",
+    "should_trigger": false,
+    "notes": "CI/CD authoring, not provisioning a sandbox"
+  },
+  {
+    "id": "no-trigger-06",
+    "query": "How do I read an environment variable in Node.js?",
+    "should_trigger": false,
+    "notes": "Basic Node.js question, not infrastructure"
+  },
+  {
+    "id": "no-trigger-07",
+    "query": "What are the differences between AWS Lambda and Cloudflare Workers?",
+    "should_trigger": false,
+    "notes": "Educational question — does not require provisioning"
+  },
+  {
+    "id": "no-trigger-08",
+    "query": "Run the test suite and show me the failures",
+    "should_trigger": false,
+    "notes": "Testing task, no cloud infra"
+  },
+  {
+    "id": "no-trigger-09",
+    "query": "Can you explain how the provider adapter pattern works in this codebase?",
+    "should_trigger": false,
+    "notes": "Code explanation, not provisioning"
+  },
+  {
+    "id": "no-trigger-10",
+    "query": "Add Terraform support to provision infrastructure as code",
+    "should_trigger": false,
+    "notes": "IaC tooling request — not Sandman CLI orchestration"
+  }
+]

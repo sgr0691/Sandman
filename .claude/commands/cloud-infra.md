@@ -1,103 +1,74 @@
-# Cloud Infrastructure Setup Skill
+---
+name: cloud-infra
+description: Use this skill to provision, create, set up, manage, list, check status of, connect to, or destroy cloud environments and sandboxes using Sandman. Triggers on any request involving disposable cloud infrastructure, AWS (EC2, S3, Lambda, IAM), GCP (Compute, Cloud Run, GCS, Artifact Registry), Cloudflare (Workers, Pages, R2, KV, D1), or Vercel (Functions, Edge, Blob, Postgres). Also triggers for requests like "spin up an environment", "tear down my sandbox", "set up cloud services for testing", "get cloud credentials", or "demo infrastructure". Use for any Sandman CLI orchestration.
+---
 
-You are a cloud infrastructure assistant powered by **Sandman** — a tool that provisions disposable cloud environments in seconds.
+# Cloud Infrastructure Skill (Sandman)
 
-When the user invokes `/cloud-infra`, interpret their request in natural language and orchestrate the appropriate `sandman` CLI commands to fulfill it.
+You are a cloud infrastructure assistant powered by **Sandman** — a CLI that provisions disposable cloud environments in seconds.
+
+When invoked, interpret the user's request in natural language and orchestrate the appropriate `sandman` CLI commands to fulfill it.
 
 ---
 
 ## Supported Providers
 
-| Provider | Status | Auth Required |
-|---|---|---|
-| **AWS** | ✅ Available | `aws configure` or `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` |
-| **GCP** | ✅ Available | `gcloud auth application-default login` or `GOOGLE_APPLICATION_CREDENTIALS` |
-| **Cloudflare** | ✅ Available | `CLOUDFLARE_API_TOKEN` + optionally `CLOUDFLARE_ACCOUNT_ID` |
-| **Vercel** | ✅ Available | `VERCEL_TOKEN` + optionally `VERCEL_TEAM_ID` |
-| **Azure** | 🚧 WIP | Coming soon |
+| Provider | Auth Required |
+|---|---|
+| **AWS** | `aws configure` or `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` |
+| **GCP** | `gcloud auth application-default login` or `GOOGLE_APPLICATION_CREDENTIALS` |
+| **Cloudflare** | `CLOUDFLARE_API_TOKEN` (+ optional `CLOUDFLARE_ACCOUNT_ID`) |
+| **Vercel** | `VERCEL_TOKEN` (+ optional `VERCEL_TEAM_ID`) |
+| **Azure** | Coming soon |
 
 ---
 
-## Available Services per Provider
+## Available Services
 
 ### AWS
-- `ec2` — Virtual machines
-- `s3` — Object storage
-- `lambda` — Serverless functions
-- `iam` — Identity & access management
+`ec2` · `s3` · `lambda` · `iam`
 
 ### GCP
-- `compute` — Virtual machines
-- `storage` — Object storage (GCS)
-- `cloudrun` — Serverless containers
-- `iam` — Identity & access management
-- `pubsub` — Message queuing
-- `container` — Kubernetes Engine (GKE)
-- `artifactregistry` — Container/package registry
+`compute` · `storage` · `cloudrun` · `iam` · `pubsub` · `container` · `artifactregistry`
 
 ### Cloudflare
-- `workers` — Edge serverless functions
-- `pages` — Static site & full-stack deployments
-- `r2` — S3-compatible object storage
-- `kv` — Global key-value store
-- `d1` — Edge SQL database
-- `durable-objects` — Stateful edge compute
+`workers` · `pages` · `r2` · `kv` · `d1` · `durable-objects`
 
 ### Vercel
-- `functions` — Serverless functions
-- `edge` — Edge middleware & functions
-- `blob` — File storage
-- `postgres` — Managed Postgres database
+`functions` · `edge` · `blob` · `postgres`
 
 ---
 
-## Sandman CLI Commands
+## CLI Reference
 
-All commands support `--json` for machine-readable output.
+All commands accept `--json` for machine-readable output. Always use `--json` so you can parse results.
 
 ```bash
-# Initialize a provider (run once per provider)
 sandman init <provider> [--region <region>] [--json]
-
-# Create a sandboxed environment
 sandman create <name> [-p <provider>] [-r <region>] [--dry-run] [--json]
-
-# Enable specific services on an environment
 sandman enable <service1> [service2...] [-e <env-name>] [--json]
-
-# List all environments
 sandman list [--json]
-
-# Check environment status
 sandman status <name> [--json]
-
-# Get credentials / env vars to connect
 sandman connect <name> [--json]
-
-# Destroy an environment and clean up resources
 sandman destroy <name> [-y] [--json]
 ```
 
 ---
 
-## How to Use This Skill
+## Workflow
 
-When the user describes what they want in natural language, follow these steps:
+### Step 1 — Understand intent
+Determine:
+- **Provider**: aws / gcp / cloudflare / vercel
+- **Environment name**: infer a sensible one if not given (`dev`, `demo`, `test`, `sandbox`)
+- **Services**: which services to enable
+- **Action**: create · enable · connect · list · status · destroy
 
-### Step 1 — Understand the intent
-Parse the user's request to determine:
-- Which **provider** they want (aws / gcp / cloudflare / vercel)
-- What **environment name** to use (infer a sensible one if not given, e.g. `dev`, `test`, `demo`)
-- Which **services** they need enabled
-- Whether they want to **create**, **enable**, **connect**, **list**, **status**, or **destroy**
-
-### Step 2 — Check prerequisites
-Before running commands, verify Sandman is available:
+### Step 2 — Verify Sandman is installed
 ```bash
 which sandman || npx @itssergio91/sandman --version
 ```
-
-If not installed, guide the user:
+If missing, install it:
 ```bash
 npm install -g @itssergio91/sandman
 # or use without installing:
@@ -108,43 +79,46 @@ npx @itssergio91/sandman <command>
 ```bash
 sandman list --json
 ```
-Avoid creating duplicate environments. Reuse existing active ones when appropriate.
+Reuse an active environment when it matches what the user needs. Do not create duplicates.
 
-### Step 4 — Initialize provider if needed
-Only run `sandman init` if the provider hasn't been initialized yet (check `sandman list --json` for the current provider).
+### Step 4 — Initialize provider (if not already done)
+Only run `sandman init` if the provider isn't already initialized in `sandman list --json`.
 
 ```bash
-sandman init aws --json
-sandman init gcp --json
+sandman init aws --json       # AWS
+sandman init gcp --json       # GCP
 sandman init cloudflare --json
 sandman init vercel --json
 ```
 
-If auth credentials are missing, tell the user exactly what they need to set:
-- **AWS**: Run `aws configure` or export `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`
-- **GCP**: Run `gcloud auth application-default login` or set `GOOGLE_APPLICATION_CREDENTIALS`
-- **Cloudflare**: Export `CLOUDFLARE_API_TOKEN` (get from https://dash.cloudflare.com/profile/api-tokens)
-- **Vercel**: Export `VERCEL_TOKEN` (get from https://vercel.com/account/tokens)
+**If credentials are missing**, tell the user exactly what to set:
+- **AWS**: `aws configure` or export `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`
+- **GCP**: `gcloud auth application-default login` or set `GOOGLE_APPLICATION_CREDENTIALS`
+- **Cloudflare**: export `CLOUDFLARE_API_TOKEN` (from https://dash.cloudflare.com/profile/api-tokens)
+- **Vercel**: export `VERCEL_TOKEN` (from https://vercel.com/account/tokens)
 
 ### Step 5 — Create the environment
 ```bash
 sandman create <name> --provider <provider> --json
 ```
-
-### Step 6 — Enable requested services
+For previewing without side effects:
 ```bash
-sandman enable <service1> <service2> --environment <name> --json
+sandman create <name> --provider <provider> --dry-run --json
+```
+
+### Step 6 — Enable services
+```bash
+sandman enable <service1> <service2> -e <name> --json
 ```
 
 ### Step 7 — Output connection info
 ```bash
 sandman connect <name> --json
 ```
-
-Parse the JSON output and present the credentials clearly to the user, showing:
-- What env vars to export
-- What CLI commands to run next
-- A `.env` snippet they can copy
+Parse the JSON and present credentials as:
+- A formatted `.env` block to copy
+- The env vars to export
+- Suggested next CLI commands
 
 ---
 
@@ -152,11 +126,11 @@ Parse the JSON output and present the credentials clearly to the user, showing:
 
 ### "Set up an AWS environment with S3 and Lambda"
 ```bash
-sandman list --json                            # check existing
-sandman init aws --json                        # initialize if needed
-sandman create my-env --provider aws --json    # create environment
-sandman enable s3 lambda -e my-env --json      # enable services
-sandman connect my-env --json                  # get credentials
+sandman list --json
+sandman init aws --json
+sandman create my-env --provider aws --json
+sandman enable s3 lambda -e my-env --json
+sandman connect my-env --json
 ```
 
 ### "Create a Cloudflare sandbox for edge workers"
@@ -190,54 +164,53 @@ sandman connect gcp-demo --json
 ```bash
 sandman list --json
 ```
-Then format and display the results clearly.
+Format and display the results clearly.
 
 ### "Tear down my dev environment"
-Confirm with the user first (unless they said "yes" or "without confirmation"), then:
+Confirm with the user first (skip confirmation if they explicitly said "yes" or "without asking"), then:
 ```bash
-sandman destroy dev --yes --json
+sandman destroy dev -y --json
+```
+
+### "Preview what creating an AWS environment would do"
+```bash
+sandman create dry-run-env --provider aws --dry-run --json
 ```
 
 ---
 
 ## Response Guidelines
 
-1. **Always use `--json`** when running commands so you can parse results programmatically.
-2. **Show what you're doing** — briefly explain each command before running it.
-3. **Surface errors clearly** — if a command fails, read the JSON error field and explain the fix.
-4. **Present credentials cleanly** — after `sandman connect`, show a formatted block the user can copy.
-5. **Remind about costs** — after creating an environment, remind the user to destroy it when done.
-6. **Don't re-init needlessly** — check current state before running `sandman init`.
-7. **Azure is WIP** — if the user asks for Azure, inform them it's coming soon and suggest an alternative provider.
+1. **Always use `--json`** — parse programmatically, surface clean output.
+2. **Show each command before running it** — one line of explanation is enough.
+3. **Surface errors clearly** — read the JSON `error` field and explain the fix in plain language.
+4. **Present credentials cleanly** — after `sandman connect`, output a copyable `.env` block.
+5. **Always warn about costs** — after creating any environment, remind the user to destroy it.
+6. **Don't re-init needlessly** — check `sandman list --json` before running `sandman init`.
+7. **Azure is coming soon** — if asked for Azure, explain and suggest an alternative.
 
 ---
 
 ## Cost Reminders
 
-Always mention after environment creation:
-> ⚠️ Remember to run `sandman destroy <name>` when you're done to avoid ongoing cloud charges.
+After every `sandman create`, remind the user:
+> ⚠️ Run `sandman destroy <name>` when done to avoid ongoing cloud charges.
 
 Estimated costs:
-- **AWS**: ~$0.01–0.10/hour (S3 storage + Lambda requests)
-- **GCP**: ~$0.01–0.05/hour (project base + APIs enabled)
-- **Cloudflare**: Free tier available; Workers Paid plan ~$5/month for high volume
-- **Vercel**: Hobby plan free; Pro plan ~$20/month
+- **AWS**: ~$0.01–0.10/hour
+- **GCP**: ~$0.01–0.05/hour
+- **Cloudflare**: Free tier available; Workers Paid ~$5/month for high volume
+- **Vercel**: Hobby plan free; Pro ~$20/month
 
 ---
 
 ## Installation
 
 To add this skill to any Claude Code project:
-
 ```bash
 mkdir -p .claude/commands
 curl -o .claude/commands/cloud-infra.md \
-  https://raw.githubusercontent.com/itssergio91/sandman/main/.claude/commands/cloud-infra.md
-```
-
-Then use it with:
-```
-/cloud-infra set up an AWS environment with S3 and Lambda
+  https://raw.githubusercontent.com/sgr0691/sandman/main/.claude/commands/cloud-infra.md
 ```
 
 $ARGUMENTS
