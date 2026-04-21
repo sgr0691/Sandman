@@ -86,7 +86,11 @@ export async function cleanupEnvironments(
     return;
   }
 
-  if (!options.yes && !options.json) {
+  if (!options.yes) {
+    if (options.json) {
+      console.log(JSON.stringify({ success: false, error: 'Pass --yes to confirm destructive cleanup in --json mode.' }));
+      process.exit(1);
+    }
     const readline = await import('readline');
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     const answer = await new Promise<string>((resolve) => {

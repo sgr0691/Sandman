@@ -47,8 +47,19 @@ export class StateStore {
     // Atomic write: write to a temp file then rename, so readers never see partial content
     const tmpPath = `${this.configPath}.tmp.${process.pid}`;
     await fs.writeFile(tmpPath, JSON.stringify(config, null, 2), { mode: 0o600 });
-    await fs.rename(tmpPath, this.configPath);
+    try {
+      await fs.rename(tmpPath, this.configPath);
+    } catch (err) {
+      await fs.unlink(tmpPath).catch(() => {});
+      throw err;
+    }
     this.config = config;
+  }
+
+  async readAndValidate(): Promise<Config> {
+    const content = await fs.readFile(this.configPath, 'utf-8');
+    const parsed = JSON.parse(content);
+    return ConfigSchema.parse(parsed);
   }
 
   async getEnvironment(name: string): Promise<EnvironmentRecord | undefined> {

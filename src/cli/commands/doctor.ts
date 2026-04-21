@@ -57,13 +57,20 @@ export async function doctorCheck(
     message: major >= 18 ? `v${nodeVersion}` : `v${nodeVersion} — requires >=18`,
   });
 
-  // Config file
+  // Config file — use readAndValidate so parse/schema errors actually surface
   let config: Config | null = null;
   try {
-    config = await store.load();
+    config = await store.readAndValidate();
     checks.push({ name: 'Config file', status: 'pass', message: 'Valid' });
   } catch (err: any) {
-    checks.push({ name: 'Config file', status: 'fail', message: err.message });
+    // File not found means no config yet — not an error worth failing on
+    if (err.code === 'ENOENT') {
+      checks.push({ name: 'Config file', status: 'warn', message: 'Not found — run "sandman init <provider>"' });
+    } else {
+      checks.push({ name: 'Config file', status: 'fail', message: err.message });
+    }
+    // Load defaults so subsequent checks (provider, envs) can still run
+    config = await store.load();
   }
 
   // Provider configured
@@ -150,7 +157,7 @@ export async function doctorCheck(
       check.status === 'skip' ? chalk.gray(check.name) :
       chalk.white(check.name);
 
-    const msg = check.status === 'skip' ? chalk.gray(check.message) : chalk.gray(check.message);
+    const msg = chalk.gray(check.message);
 
     console.log(`  ${icon}  ${label.padEnd(26)} ${msg}`);
     if (check.status === 'fail') hasFail = true;
