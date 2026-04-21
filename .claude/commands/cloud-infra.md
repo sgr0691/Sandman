@@ -169,7 +169,7 @@ Format and display the results clearly.
 ### "Tear down my dev environment"
 Confirm with the user first (skip confirmation if they explicitly said "yes" or "without asking"), then:
 ```bash
-sandman destroy dev --yes --json
+sandman destroy dev -y --json
 ```
 
 ### "Preview what creating an AWS environment would do"
