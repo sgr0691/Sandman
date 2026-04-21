@@ -39,8 +39,15 @@ export class StateStore {
   }
 
   async save(config: Config): Promise<void> {
-    await fs.mkdir(dirname(this.configPath), { recursive: true });
-    await fs.writeFile(this.configPath, JSON.stringify(config, null, 2));
+    const dir = dirname(this.configPath);
+    await fs.mkdir(dir, { recursive: true });
+    // Restrict directory so only the owner can read it
+    await fs.chmod(dir, 0o700).catch(() => {});
+
+    // Atomic write: write to a temp file then rename, so readers never see partial content
+    const tmpPath = `${this.configPath}.tmp.${process.pid}`;
+    await fs.writeFile(tmpPath, JSON.stringify(config, null, 2), { mode: 0o600 });
+    await fs.rename(tmpPath, this.configPath);
     this.config = config;
   }
 
