@@ -1,13 +1,14 @@
 import chalk from "chalk";
 import ora from "ora";
 import { StateStore } from "../../core/state-store.js";
-import { getAdapter } from "../../providers/index.js";
+import { configureAdapter, getAdapter } from "../../providers/index.js";
 import {
   experimentalWarning,
   parseProvider,
 } from "../../providers/catalog.js";
 import {
   calculateEstimate,
+  defaultCreateServices,
   formatHourlyRate,
 } from "../../utils/cost-estimator.js";
 import { emitErr, emitOk, mapThrownError } from "../output.js";
@@ -65,7 +66,7 @@ export async function createEnvironment(
   }
 
   const existing = await store.getEnvironment(name);
-  if (existing) {
+  if (existing && existing.status !== "destroyed") {
     emitErr(params.json, {
       code: "ALREADY_EXISTS",
       error: `Environment "${name}" already exists.`,
@@ -74,7 +75,8 @@ export async function createEnvironment(
   }
 
   const warning = experimentalWarning(providerType);
-  const region = options.region || providerConfig.region || "default";
+  const requestedRegion = options.region || providerConfig.region;
+  const region = requestedRegion || "default";
 
   if (params.dryRun) {
     const dryRunResult = {
@@ -96,7 +98,10 @@ export async function createEnvironment(
     return;
   }
 
-  const costEstimate = calculateEstimate(providerType, []);
+  const costEstimate = calculateEstimate(
+    providerType,
+    defaultCreateServices(providerType),
+  );
   const costDisplay = formatHourlyRate(costEstimate.hourlyRate);
 
   if (!params.json) {
@@ -120,17 +125,46 @@ export async function createEnvironment(
 
   try {
     const adapter = getAdapter(providerType);
+    await adapter.init();
+    configureAdapter(adapter, { region: requestedRegion });
     const env = await adapter.createEnvironment(name);
+    if (requestedRegion && !env.region) {
+      env.region = requestedRegion;
+    }
 
     await store.saveEnvironment(env);
+
+    const warnings: string[] = [];
+    if (warning) warnings.push(warning);
+    if (env.status === "failed" && env.error) warnings.push(env.error);
+    const partial = env.status === "failed";
 
     emitOk(
       params.json,
       {
         environment: env,
         ...(warning ? { warning } : {}),
+        ...(warnings.length ? { warnings } : {}),
+        ...(partial ? { partial: true } : {}),
       },
       () => {
+        if (partial) {
+          spinner!.warn(
+            chalk.yellow(
+              `Environment "${name}" was saved as failed (partial resources).`,
+            ),
+          );
+          if (env.error) {
+            console.log(chalk.red(`Error: ${env.error}`));
+          }
+          console.log(
+            chalk.cyan(`\n→ Run "sandman status ${name}" to see what was created`),
+          );
+          console.log(
+            chalk.cyan(`→ Run "sandman destroy ${name}" to clean up partial resources`),
+          );
+          return;
+        }
         spinner!.succeed(
           chalk.green(`Environment "${name}" created successfully!`),
         );
@@ -160,4 +194,3 @@ export async function createEnvironment(
     );
   }
 }
-

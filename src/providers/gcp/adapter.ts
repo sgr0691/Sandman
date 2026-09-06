@@ -6,6 +6,11 @@ export class GcpAdapter implements ProviderAdapter {
   private projectId: string | null = null;
   private projectNumber: string | null = null;
   private billingAccountId: string | null = null;
+  private region: string | undefined;
+
+  setRegion(region: string): void {
+    this.region = region;
+  }
 
   async init(): Promise<void> {
     try {
@@ -101,6 +106,7 @@ export class GcpAdapter implements ProviderAdapter {
         name,
         provider: "gcp",
         projectId: sandmanProjectId,
+        region: this.region,
         status: "active",
         services: [],
         resources: {},
@@ -188,6 +194,12 @@ export class GcpAdapter implements ProviderAdapter {
   async destroyEnvironment(env: EnvironmentRecord): Promise<void> {
     if (!env.projectId) {
       throw new Error("Project ID is required to destroy environment");
+    }
+
+    if (!env.projectId.startsWith("sandman-")) {
+      throw new Error(
+        `Refusing to delete GCP project "${env.projectId}" because it was not created by Sandman (expected sandman- prefix).`,
+      );
     }
 
     try {

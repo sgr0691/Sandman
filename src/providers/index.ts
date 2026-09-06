@@ -17,3 +17,12 @@ export function getAdapter(providerType: ProviderType): ProviderAdapter {
     }
   }
 }
+
+export function configureAdapter(
+  adapter: ProviderAdapter,
+  options: { region?: string },
+): void {
+  if (options.region && typeof adapter.setRegion === "function") {
+    adapter.setRegion(options.region);
+  }
+}

@@ -8,6 +8,10 @@ import {
   ProviderType,
 } from "../types/index.js";
 
+const LOCK_STALE_MS = 30_000;
+const LOCK_WAIT_MS = 5_000;
+const LOCK_POLL_MS = 50;
+
 function expandPath(path: string): string {
   if (path.startsWith("~/")) {
     return path.replace("~", homedir());
@@ -16,11 +20,15 @@ function expandPath(path: string): string {
 }
 
 export class StateError extends Error {
-  readonly code = "STATE_CORRUPT";
+  readonly code: "STATE_CORRUPT" | "STATE_LOCKED";
 
-  constructor(message: string) {
+  constructor(
+    message: string,
+    code: "STATE_CORRUPT" | "STATE_LOCKED" = "STATE_CORRUPT",
+  ) {
     super(message);
     this.name = "StateError";
+    this.code = code;
   }
 }
 
@@ -32,7 +40,64 @@ export class StateStore {
     this.configPath = expandPath(configPath);
   }
 
+  private lockPath(): string {
+    return `${this.configPath}.lock`;
+  }
+
   async load(): Promise<Config> {
+    return this.loadUnlocked();
+  }
+
+  async save(config: Config): Promise<void> {
+    await this.withLock(() => this.saveUnlocked(config));
+  }
+
+  async getEnvironment(name: string): Promise<EnvironmentRecord | undefined> {
+    const config = await this.loadUnlocked();
+    return config.environments[name];
+  }
+
+  async saveEnvironment(env: EnvironmentRecord): Promise<void> {
+    await this.withLock(async () => {
+      const config = await this.loadUnlocked();
+      config.environments[env.name] = env;
+      await this.saveUnlocked(config);
+    });
+  }
+
+  async deleteEnvironment(name: string): Promise<void> {
+    await this.withLock(async () => {
+      const config = await this.loadUnlocked();
+      delete config.environments[name];
+      await this.saveUnlocked(config);
+    });
+  }
+
+  async listEnvironments(): Promise<EnvironmentRecord[]> {
+    const config = await this.loadUnlocked();
+    return Object.values(config.environments);
+  }
+
+  async setProvider(provider: ProviderType, region?: string): Promise<void> {
+    await this.withLock(async () => {
+      const config = await this.loadUnlocked();
+      config.provider = provider;
+      if (region) {
+        config.defaultRegion = region;
+      }
+      await this.saveUnlocked(config);
+    });
+  }
+
+  async getProvider(): Promise<{ provider?: ProviderType; region?: string }> {
+    const config = await this.loadUnlocked();
+    return {
+      provider: config.provider,
+      region: config.defaultRegion,
+    };
+  }
+
+  private async loadUnlocked(): Promise<Config> {
     let content: string;
     try {
       content = await fs.readFile(this.configPath, "utf-8");
@@ -71,7 +136,7 @@ export class StateStore {
     return this.config;
   }
 
-  async save(config: Config): Promise<void> {
+  private async saveUnlocked(config: Config): Promise<void> {
     const dir = dirname(this.configPath);
     await fs.mkdir(dir, { recursive: true });
     if (basename(dir) === ".sandman") {
@@ -96,43 +161,52 @@ export class StateStore {
     this.config = config;
   }
 
-  async getEnvironment(name: string): Promise<EnvironmentRecord | undefined> {
-    const config = await this.load();
-    return config.environments[name];
-  }
-
-  async saveEnvironment(env: EnvironmentRecord): Promise<void> {
-    const config = await this.load();
-    config.environments[env.name] = env;
-    await this.save(config);
-  }
-
-  async deleteEnvironment(name: string): Promise<void> {
-    const config = await this.load();
-    delete config.environments[name];
-    await this.save(config);
-  }
-
-  async listEnvironments(): Promise<EnvironmentRecord[]> {
-    const config = await this.load();
-    return Object.values(config.environments);
-  }
-
-  async setProvider(provider: ProviderType, region?: string): Promise<void> {
-    const config = await this.load();
-    config.provider = provider;
-    if (region) {
-      config.defaultRegion = region;
+  private async withLock<T>(fn: () => Promise<T>): Promise<T> {
+    await this.acquireLock();
+    try {
+      return await fn();
+    } finally {
+      await this.releaseLock();
     }
-    await this.save(config);
   }
 
-  async getProvider(): Promise<{ provider?: ProviderType; region?: string }> {
-    const config = await this.load();
-    return {
-      provider: config.provider,
-      region: config.defaultRegion,
-    };
+  private async acquireLock(): Promise<void> {
+    const lockPath = this.lockPath();
+    const started = Date.now();
+    while (true) {
+      try {
+        await fs.writeFile(lockPath, String(process.pid), {
+          flag: "wx",
+          mode: 0o600,
+        });
+        return;
+      } catch (error: unknown) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== "EEXIST") {
+          throw error;
+        }
+        try {
+          const stat = await fs.stat(lockPath);
+          if (Date.now() - stat.mtimeMs > LOCK_STALE_MS) {
+            await fs.unlink(lockPath).catch(() => undefined);
+            continue;
+          }
+        } catch {
+          continue;
+        }
+        if (Date.now() - started > LOCK_WAIT_MS) {
+          throw new StateError(
+            `Sandman state is locked (${lockPath}). Retry in a moment; another sandman process may be running.`,
+            "STATE_LOCKED",
+          );
+        }
+        await new Promise((resolve) => setTimeout(resolve, LOCK_POLL_MS));
+      }
+    }
+  }
+
+  private async releaseLock(): Promise<void> {
+    await fs.unlink(this.lockPath()).catch(() => undefined);
   }
 
   private async tightenPermissions(): Promise<void> {

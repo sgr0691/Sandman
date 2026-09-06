@@ -5,6 +5,7 @@ import { logger } from "../../utils/logger.js";
 export class AwsAdapter implements ProviderAdapter {
   private accountId: string | null = null;
   private region: string = "us-east-1";
+  private regionExplicit = false;
 
   async init(): Promise<void> {
     try {
@@ -16,7 +17,9 @@ export class AwsAdapter implements ProviderAdapter {
       const response = await client.send(command);
 
       this.accountId = response.Account || null;
-      this.region = process.env.AWS_DEFAULT_REGION || "us-east-1";
+      if (!this.regionExplicit) {
+        this.region = process.env.AWS_DEFAULT_REGION || "us-east-1";
+      }
     } catch (error: any) {
       if (error.name === "CredentialsProviderError") {
         throw new Error(
@@ -27,12 +30,17 @@ export class AwsAdapter implements ProviderAdapter {
     }
   }
 
+  setRegion(region: string): void {
+    this.region = region;
+    this.regionExplicit = true;
+  }
+
   async createEnvironment(name: string): Promise<EnvironmentRecord> {
     const bucketName = `sandman-${name}-${Date.now()}`;
     const resources: Record<string, string> = {};
+    const warnings: string[] = [];
 
     try {
-      // Create S3 bucket
       const { S3Client, CreateBucketCommand } =
         await import("@aws-sdk/client-s3");
       const s3Client = new S3Client({ region: this.region });
@@ -43,8 +51,11 @@ export class AwsAdapter implements ProviderAdapter {
         }),
       );
 
-      const { PutPublicAccessBlockCommand, PutBucketEncryptionCommand } =
-        await import("@aws-sdk/client-s3");
+      const {
+        PutPublicAccessBlockCommand,
+        PutBucketEncryptionCommand,
+        PutBucketTaggingCommand,
+      } = await import("@aws-sdk/client-s3");
       await s3Client.send(
         new PutPublicAccessBlockCommand({
           Bucket: bucketName,
@@ -71,31 +82,56 @@ export class AwsAdapter implements ProviderAdapter {
           },
         }),
       );
+      try {
+        await s3Client.send(
+          new PutBucketTaggingCommand({
+            Bucket: bucketName,
+            Tagging: {
+              TagSet: [
+                { Key: "CreatedBy", Value: "sandman" },
+                { Key: "Name", Value: `sandman-${name}` },
+              ],
+            },
+          }),
+        );
+      } catch (error: any) {
+        logger.warn(`Could not tag bucket: ${error.message}`);
+      }
 
       resources.bucketName = bucketName;
     } catch (error: any) {
-      if (error.name !== "BucketAlreadyOwnedByYou") {
+      if (error.name === "BucketAlreadyOwnedByYou") {
+        resources.bucketName = bucketName;
+      } else {
+        warnings.push(`bucket: ${error.message}`);
         logger.warn(`Could not create bucket: ${error.message}`);
       }
     }
 
-    // Create VPC and networking
     try {
       const vpcResources = await this.createVpcResources(name);
-      Object.assign(resources, vpcResources);
+      for (const [key, value] of Object.entries(vpcResources)) {
+        if (value) {
+          resources[key] = value;
+        }
+      }
     } catch (error: any) {
+      warnings.push(`vpc: ${error.message}`);
       logger.warn(`Could not create VPC: ${error.message}`);
     }
 
-    // Create IAM role
     try {
       const iamResources = await this.createIamResources(name);
-      Object.assign(resources, iamResources);
+      for (const [key, value] of Object.entries(iamResources)) {
+        if (value) {
+          resources[key] = value;
+        }
+      }
     } catch (error: any) {
+      warnings.push(`iam: ${error.message}`);
       logger.warn(`Could not create IAM role: ${error.message}`);
     }
 
-    // Create EC2 instance
     try {
       if (resources.vpcId && resources.subnetId && resources.securityGroupId) {
         const instanceId = await this.createEc2Instance(
@@ -104,23 +140,41 @@ export class AwsAdapter implements ProviderAdapter {
           resources.securityGroupId,
           resources.iamInstanceProfile,
         );
-        resources.instanceId = instanceId;
+        if (instanceId) {
+          resources.instanceId = instanceId;
+        }
       }
     } catch (error: any) {
+      warnings.push(`ec2: ${error.message}`);
       logger.warn(`Could not create EC2 instance: ${error.message}`);
     }
 
     const now = new Date().toISOString();
+    const hasResources = Object.keys(resources).length > 0;
+    if (!hasResources) {
+      throw new Error(
+        `Failed to create any AWS resources for "${name}"${warnings.length ? `: ${warnings.join("; ")}` : "."}`,
+      );
+    }
+
+    const complete = Boolean(
+      resources.bucketName &&
+        resources.vpcId &&
+        resources.subnetId &&
+        resources.securityGroupId,
+    );
+
     return {
       name,
       provider: "aws",
       accountId: this.accountId || undefined,
       region: this.region,
-      status: "active",
+      status: complete ? "active" : "failed",
       services: [],
       resources,
       createdAt: now,
       updatedAt: now,
+      error: complete ? undefined : warnings.join("; ") || "Partial AWS create",
     };
   }
 
@@ -339,7 +393,8 @@ export class AwsAdapter implements ProviderAdapter {
       }),
     );
     resources.iamInstanceProfile =
-      profileResponse.InstanceProfile?.InstanceProfileName || "";
+      profileResponse.InstanceProfile?.InstanceProfileName ||
+      instanceProfileName;
 
     // Add role to instance profile
     await iamClient.send(
@@ -361,10 +416,11 @@ export class AwsAdapter implements ProviderAdapter {
     const { EC2Client, RunInstancesCommand } =
       await import("@aws-sdk/client-ec2");
     const ec2Client = new EC2Client({ region: this.region });
+    const imageId = await this.resolveAmi();
 
     const instanceResponse = await ec2Client.send(
       new RunInstancesCommand({
-        ImageId: "ami-0c7217cdde317cfec", // Amazon Linux 2023
+        ImageId: imageId,
         InstanceType: "t2.micro",
         MinCount: 1,
         MaxCount: 1,
@@ -386,6 +442,30 @@ export class AwsAdapter implements ProviderAdapter {
     );
 
     return instanceResponse.Instances?.[0]?.InstanceId || "";
+  }
+
+  private static readonly FALLBACK_AMI = "ami-0c7217cdde317cfec";
+
+  private async resolveAmi(): Promise<string> {
+    try {
+      const { SSMClient, GetParameterCommand } =
+        await import("@aws-sdk/client-ssm");
+      const ssm = new SSMClient({ region: this.region });
+      const response = await ssm.send(
+        new GetParameterCommand({
+          Name: "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64",
+        }),
+      );
+      const ami = response.Parameter?.Value;
+      if (ami) {
+        return ami;
+      }
+    } catch (error: any) {
+      logger.warn(
+        `Could not resolve latest AL2023 AMI via SSM (${error.message}); falling back to ${AwsAdapter.FALLBACK_AMI}`,
+      );
+    }
+    return AwsAdapter.FALLBACK_AMI;
   }
 
   async enableServices(
@@ -423,8 +503,11 @@ export class AwsAdapter implements ProviderAdapter {
   }
 
   async destroyEnvironment(env: EnvironmentRecord): Promise<void> {
+    await this.assertCallerAccount(env);
+    await this.assertSandmanOwnership(env);
+
     const { EC2Client } = await import("@aws-sdk/client-ec2");
-    const ec2Client = new EC2Client({ region: env.region });
+    const ec2Client = new EC2Client({ region: env.region || this.region });
     const failures: string[] = [];
 
     // Terminate EC2 instance
@@ -449,51 +532,13 @@ export class AwsAdapter implements ProviderAdapter {
       }
     }
 
-    // Delete S3 bucket (paginate so leftover objects cannot block delete)
     if (env.resources.bucketName) {
       try {
-        const {
-          S3Client,
-          DeleteBucketCommand,
-          ListObjectsV2Command,
-          DeleteObjectsCommand,
-        } = await import("@aws-sdk/client-s3");
-        const s3Client = new S3Client({ region: env.region });
-        const bucket = env.resources.bucketName as string;
-
-        let token: string | undefined;
-        do {
-          const listResponse = await s3Client.send(
-            new ListObjectsV2Command({
-              Bucket: bucket,
-              ContinuationToken: token,
-            }),
-          );
-
-          if (listResponse.Contents?.length) {
-            await s3Client.send(
-              new DeleteObjectsCommand({
-                Bucket: bucket,
-                Delete: {
-                  Objects: listResponse.Contents.map((obj) => ({
-                    Key: obj.Key!,
-                  })),
-                },
-              }),
-            );
-          }
-
-          token = listResponse.IsTruncated
-            ? listResponse.NextContinuationToken
-            : undefined;
-        } while (token);
-
-        await s3Client.send(
-          new DeleteBucketCommand({
-            Bucket: bucket,
-          }),
+        await this.emptyAndDeleteBucket(
+          env.resources.bucketName as string,
+          env.region,
         );
-        logger.info(`Deleted S3 bucket: ${bucket}`);
+        logger.info(`Deleted S3 bucket: ${env.resources.bucketName}`);
       } catch (error: any) {
         if (error.name !== "NoSuchBucket") {
           failures.push(`bucket: ${error.message}`);
@@ -613,6 +658,204 @@ export class AwsAdapter implements ProviderAdapter {
         `Failed to fully destroy environment "${env.name}": ${failures.join("; ")}. Local state was not updated — retry destroy after resolving these errors.`,
       );
     }
+  }
+
+  private async assertCallerAccount(env: EnvironmentRecord): Promise<void> {
+    if (!env.accountId) {
+      return;
+    }
+    const { STSClient, GetCallerIdentityCommand } =
+      await import("@aws-sdk/client-sts");
+    const sts = new STSClient({ region: env.region || this.region });
+    const identity = await sts.send(new GetCallerIdentityCommand({}));
+    if (identity.Account && identity.Account !== env.accountId) {
+      throw new Error(
+        `Refusing to destroy "${env.name}": state account ${env.accountId} does not match caller ${identity.Account}.`,
+      );
+    }
+  }
+
+  private isSandmanOwned(
+    tags: { Key?: string; Value?: string }[] | undefined,
+    fallbackName?: string,
+  ): boolean {
+    if (tags?.some((t) => t.Key === "CreatedBy" && t.Value === "sandman")) {
+      return true;
+    }
+    return Boolean(fallbackName?.startsWith("sandman-"));
+  }
+
+  private isMissingAwsResource(error: any): boolean {
+    const name = error?.name || "";
+    const message = error?.message || "";
+    return (
+      name === "NoSuchBucket" ||
+      name === "NoSuchTagSet" ||
+      name === "NoSuchEntity" ||
+      name === "InvalidInstanceID.NotFound" ||
+      name === "InvalidVpcID.NotFound" ||
+      name === "InvalidGroup.NotFound" ||
+      name === "InvalidSubnetID.NotFound" ||
+      name === "InvalidInternetGatewayID.NotFound" ||
+      /not found|does not exist/i.test(message)
+    );
+  }
+
+  private async assertSandmanOwnership(env: EnvironmentRecord): Promise<void> {
+    const region = env.region || this.region;
+    const { EC2Client } = await import("@aws-sdk/client-ec2");
+    const ec2Client = new EC2Client({ region });
+
+    const refuse = (resource: string, id: string) => {
+      throw new Error(
+        `Refusing to destroy ${resource} ${id}: it is not tagged CreatedBy=sandman and does not use a sandman- name prefix.`,
+      );
+    };
+
+    if (env.resources.instanceId) {
+      try {
+        const { DescribeInstancesCommand } = await import("@aws-sdk/client-ec2");
+        const described = await ec2Client.send(
+          new DescribeInstancesCommand({
+            InstanceIds: [env.resources.instanceId as string],
+          }),
+        );
+        const instance = described.Reservations?.[0]?.Instances?.[0];
+        const nameTag = instance?.Tags?.find((t) => t.Key === "Name")?.Value;
+        if (instance && !this.isSandmanOwned(instance.Tags, nameTag)) {
+          refuse("instance", env.resources.instanceId as string);
+        }
+      } catch (error: any) {
+        if (!this.isMissingAwsResource(error)) {
+          throw error;
+        }
+      }
+    }
+
+    if (env.resources.vpcId) {
+      try {
+        const { DescribeVpcsCommand } = await import("@aws-sdk/client-ec2");
+        const described = await ec2Client.send(
+          new DescribeVpcsCommand({ VpcIds: [env.resources.vpcId as string] }),
+        );
+        const vpc = described.Vpcs?.[0];
+        const nameTag = vpc?.Tags?.find((t) => t.Key === "Name")?.Value;
+        if (vpc && !this.isSandmanOwned(vpc.Tags, nameTag)) {
+          refuse("vpc", env.resources.vpcId as string);
+        }
+      } catch (error: any) {
+        if (!this.isMissingAwsResource(error)) {
+          throw error;
+        }
+      }
+    }
+
+    if (env.resources.bucketName) {
+      const bucket = env.resources.bucketName as string;
+      try {
+        const { S3Client, GetBucketTaggingCommand } =
+          await import("@aws-sdk/client-s3");
+        const s3 = new S3Client({ region });
+        const tagging = await s3.send(
+          new GetBucketTaggingCommand({ Bucket: bucket }),
+        );
+        if (!this.isSandmanOwned(tagging.TagSet, bucket)) {
+          refuse("bucket", bucket);
+        }
+      } catch (error: any) {
+        if (error.name !== "NoSuchBucket" && !bucket.startsWith("sandman-")) {
+          refuse("bucket", bucket);
+        }
+      }
+    }
+
+    if (env.resources.iamInstanceProfile) {
+      const profile = String(env.resources.iamInstanceProfile);
+      if (!profile.startsWith("sandman-")) {
+        refuse("iam instance profile", profile);
+      }
+    }
+  }
+
+  private async emptyAndDeleteBucket(
+    bucket: string,
+    region?: string,
+  ): Promise<void> {
+    const {
+      S3Client,
+      DeleteBucketCommand,
+      ListObjectsV2Command,
+      ListObjectVersionsCommand,
+      DeleteObjectsCommand,
+    } = await import("@aws-sdk/client-s3");
+    const s3Client = new S3Client({ region });
+
+    let token: string | undefined;
+    do {
+      const listResponse = await s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: bucket,
+          ContinuationToken: token,
+        }),
+      );
+
+      if (listResponse.Contents?.length) {
+        await s3Client.send(
+          new DeleteObjectsCommand({
+            Bucket: bucket,
+            Delete: {
+              Objects: listResponse.Contents.map((obj) => ({
+                Key: obj.Key!,
+              })),
+            },
+          }),
+        );
+      }
+
+      token = listResponse.IsTruncated
+        ? listResponse.NextContinuationToken
+        : undefined;
+    } while (token);
+
+    let keyMarker: string | undefined;
+    let versionIdMarker: string | undefined;
+    do {
+      const versions = await s3Client.send(
+        new ListObjectVersionsCommand({
+          Bucket: bucket,
+          KeyMarker: keyMarker,
+          VersionIdMarker: versionIdMarker,
+        }),
+      );
+      const objects = [
+        ...(versions.Versions ?? []).map((v) => ({
+          Key: v.Key!,
+          VersionId: v.VersionId,
+        })),
+        ...(versions.DeleteMarkers ?? []).map((m) => ({
+          Key: m.Key!,
+          VersionId: m.VersionId,
+        })),
+      ];
+      if (objects.length) {
+        await s3Client.send(
+          new DeleteObjectsCommand({
+            Bucket: bucket,
+            Delete: { Objects: objects },
+          }),
+        );
+      }
+      keyMarker = versions.IsTruncated ? versions.NextKeyMarker : undefined;
+      versionIdMarker = versions.IsTruncated
+        ? versions.NextVersionIdMarker
+        : undefined;
+    } while (keyMarker);
+
+    await s3Client.send(
+      new DeleteBucketCommand({
+        Bucket: bucket,
+      }),
+    );
   }
 
   async getStatus(env: EnvironmentRecord): Promise<EnvironmentRecord> {

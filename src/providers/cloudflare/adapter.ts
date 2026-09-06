@@ -4,6 +4,11 @@ import { logger } from "../../utils/logger.js";
 
 export class CloudflareAdapter implements ProviderAdapter {
   private accountId: string | null = null;
+  private region: string | undefined;
+
+  setRegion(region: string): void {
+    this.region = region;
+  }
 
   async init(): Promise<void> {
     const apiToken = process.env.CLOUDFLARE_API_TOKEN;
@@ -60,6 +65,7 @@ export class CloudflareAdapter implements ProviderAdapter {
       name,
       provider: "cloudflare",
       accountId: process.env.CLOUDFLARE_ACCOUNT_ID || undefined,
+      region: this.region,
       status: "active",
       services: [],
       resources: {

@@ -181,6 +181,10 @@ sandman create demo -p gcp -r us-central1 --json
 
 Names must be lowercase letters, digits, and hyphens (max 31 characters).
 
+AWS create persists whatever IDs were provisioned. If some steps fail, JSON includes `partial: true` and `warnings`; `environment.status` is `failed`. Destroy those leftovers, then recreate.
+
+The `-r` / stored default region is passed to the provider (AWS honors it).
+
 ---
 
 ### Enable services
@@ -206,6 +210,8 @@ sandman list
 sandman list --json
 ```
 
+`--json` is a raw array of environments (not wrapped, not init state). `sandman init` is separate.
+
 ---
 
 ### Environment status
@@ -215,7 +221,7 @@ sandman status demo
 sandman status demo --json
 ```
 
-Shows provider, status, age, resources, and estimated cost.
+Shows provider, status, age, resources, and estimated cost. Status refreshes from the cloud when the adapter supports it (GCP project lifecycle) and saves if it changed.
 
 ---
 
@@ -237,7 +243,7 @@ sandman destroy demo
 sandman destroy demo -y --json
 ```
 
-Deletes associated cloud resources. `--json` never prompts; pass `-y` to confirm.
+Deletes associated cloud resources, then removes the local record so the name can be reused. `--json` never prompts; pass `-y` to confirm.
 
 ---
 

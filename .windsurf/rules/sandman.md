@@ -45,11 +45,12 @@ sandman providers [--json]
 When a user asks to set up cloud infrastructure:
 
 1. **Check if Sandman is installed**: `which sandman || npx @itssergio91/sandman --version`
-2. **List existing environments**: `sandman list --json` — reuse active ones, avoid duplicates
-3. **Initialize the provider** (only if not already done): `sandman init <provider> --json`
+2. **List existing environments**: `sandman list --json` — a raw array of environments, not init state. Reuse *active* ones; a `destroyed` name can be recreated
+3. **Initialize the provider** if create would return `NO_PROVIDER`: `sandman init <provider> --json`
 4. **Create the environment**: `sandman create <name> --provider <provider> --json`
-5. **Enable services**: `sandman enable <services...> -e <name> --json`
-6. **Get credentials**: `sandman connect <name> --json` — present as a copyable `.env` block
+5. **Inspect create JSON**: if `environment.status` is `failed` or `partial` is true, destroy then recreate. Read `warnings[]`
+6. **Enable services**: `sandman enable <services...> -e <name> --json` — GCP enables APIs; AWS/Cloudflare/Vercel update the local registry only
+7. **Get credentials**: `sandman connect <name> --json` — present as a copyable `.env` block
 
 ## Example Flows
 
@@ -91,12 +92,13 @@ sandman connect vercel-demo --json
 
 ## Rules
 
-- Always use `--json` flag for machine-readable output. Failures include `code`, `error`, `hint`, and `next`.
-- Run `sandman providers --json` when the user asks for Cloudflare or Vercel: they are experimental (local registry only).
+- Always use `--json` flag for machine-readable output. Failures include `code`, `error`, `hint`, and `next`. Extra create fields: `warnings[]`, `partial`.
+- Run `sandman providers --json` when the user asks for Cloudflare or Vercel: they are experimental (local registry only; create/enable do not provision CF/Vercel cloud resources).
 - After creating any environment, remind the user: **run `sandman destroy <name>` when done** to avoid cloud charges
+- After a successful destroy, the name is recycled — recreate is allowed
 - Before destroying, confirm with the user unless they explicitly said to skip it, then run `sandman destroy <name> -y --json`
 - `sandman connect --json` redacts tokens. Do not pass `--show-secrets` unless the user asks.
-- If credentials are missing, tell the user exactly what env vars to set or CLI auth commands to run
-- Do not re-initialize a provider if it already appears in `sandman list --json`
+- If credentials are missing (`AUTH_REQUIRED`), tell the user exactly what env vars to set or CLI auth commands to run
+- `sandman list --json` is environments only. Do not treat it as init state; run `sandman init` when create returns `NO_PROVIDER`
 - If Azure is requested, explain it's coming soon and suggest AWS or GCP
 - For dry-run previews, use `sandman create <name> --provider <provider> --dry-run --json`

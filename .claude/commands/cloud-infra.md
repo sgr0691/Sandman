@@ -83,10 +83,10 @@ npx @itssergio91/sandman <command>
 sandman providers --json
 sandman list --json
 ```
-Reuse an active environment when it matches what the user needs. Do not create duplicates.
+`list --json` is a raw array of environments (not init state). Reuse an *active* environment when it matches. A `destroyed` name can be recreated.
 
 ### Step 4 — Initialize provider (if not already done)
-Only run `sandman init` if the provider isn't already initialized in `sandman list --json`.
+Run `sandman init` when create would return `NO_PROVIDER`. Do not treat `sandman list --json` as proof of init.
 
 ```bash
 sandman init aws --json       # AWS
@@ -105,6 +105,7 @@ sandman init vercel --json
 ```bash
 sandman create <name> --provider <provider> --json
 ```
+Inspect `environment.status`, `warnings`, and `partial`. If status is `failed`, destroy then recreate.
 For previewing without side effects:
 ```bash
 sandman create <name> --provider <provider> --dry-run --json
@@ -114,6 +115,7 @@ sandman create <name> --provider <provider> --dry-run --json
 ```bash
 sandman enable <service1> <service2> -e <name> --json
 ```
+GCP enable hits cloud APIs. AWS, Cloudflare, and Vercel enable only update the local registry.
 
 ### Step 7 — Output connection info
 ```bash
@@ -185,14 +187,15 @@ sandman create dry-run-env --provider aws --dry-run --json
 
 ## Response Guidelines
 
-1. **Always use `--json`** — parse programmatically, surface clean output. On failure read `code`, `error`, `hint`, and `next`.
+1. **Always use `--json`** — parse programmatically, surface clean output. On failure read `code`, `error`, `hint`, and `next`. Create may also include `warnings[]` and `partial`.
 2. **Show each command before running it** — one line of explanation is enough.
-3. **Surface errors clearly** — read the JSON `error` field and explain the fix in plain language.
+3. **Surface errors clearly** — read the JSON `error` field and explain the fix in plain language. `AUTH_REQUIRED` covers missing CF/Vercel tokens too.
 4. **Present credentials cleanly** — after `sandman connect`, output a copyable `.env` block of non-secret values. Do not pass `--show-secrets` unless the user asks.
 5. **Always warn about costs** — after creating any environment, remind the user to destroy it.
-6. **Don't re-init needlessly** — check `sandman list --json` before running `sandman init`.
-7. **Experimental providers** — Cloudflare and Vercel authenticate but do not provision cloud resources yet. Tell the user if `sandman providers --json` marks them experimental.
-8. **Azure is coming soon** — if asked for Azure, explain and suggest AWS or GCP.
+6. **Don't treat list as init** — `sandman list --json` is environments only. Init when create returns `NO_PROVIDER`.
+7. **Experimental providers** — Cloudflare and Vercel authenticate but only write a local registry. Tell the user if `sandman providers --json` marks them experimental.
+8. **Destroy recycles the name** — after `sandman destroy <name> -y --json`, recreate with the same name is allowed.
+9. **Azure is coming soon** — if asked for Azure, explain and suggest AWS or GCP.
 
 ---
 

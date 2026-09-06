@@ -13,6 +13,7 @@ export type ResultCode =
   | "CONFIRMATION_REQUIRED"
   | "PROVIDER_ERROR"
   | "STATE_CORRUPT"
+  | "STATE_LOCKED"
   | "INTERNAL";
 
 export interface OkPayload extends Record<string, unknown> {
@@ -92,10 +93,14 @@ export function mapThrownError(error: unknown): {
   const message = error instanceof Error ? error.message : String(error);
   const maybeCode = (error as { code?: string } | undefined)?.code;
 
-  if (maybeCode === "STATE_CORRUPT") {
-    return { code: "STATE_CORRUPT", error: message };
+  if (maybeCode === "STATE_CORRUPT" || maybeCode === "STATE_LOCKED") {
+    return { code: maybeCode, error: message };
   }
-  if (/credentials required|authentication required|unauthenticated/i.test(message)) {
+  if (
+    /credentials required|authentication required|unauthenticated|authentication failed|api[_-]?token|VERCEL_TOKEN|environment variable is required/i.test(
+      message,
+    )
+  ) {
     return { code: "AUTH_REQUIRED", error: message };
   }
   return { code: "PROVIDER_ERROR", error: message };

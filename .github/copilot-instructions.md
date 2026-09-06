@@ -47,16 +47,16 @@ When helping users provision infrastructure, follow this sequence:
 # 0. Discover provider maturity (supported vs experimental)
 sandman providers --json
 
-# 1. Check existing environments (avoid duplicates)
+# 1. Check existing environments (raw array; not init state)
 sandman list --json
 
-# 2. Initialize provider if not already done
+# 2. Initialize provider when create would return NO_PROVIDER
 sandman init <provider> --json
 
-# 3. Create environment
+# 3. Create environment (inspect environment.status, warnings, partial)
 sandman create <name> --provider <provider> --json
 
-# 4. Enable required services
+# 4. Enable required services (GCP hits APIs; AWS/CF/Vercel are local registry)
 sandman enable <service1> <service2> -e <name> --json
 
 # 5. Get connection credentials (tokens are redacted)
@@ -67,13 +67,13 @@ sandman connect <name> --json
 
 When helping with Sandman tasks:
 
-1. **Always use `--json`** so output can be parsed programmatically. Prefer `code`, `error`, `hint`, and `next` on failures.
-2. **Check before creating** — run `sandman list --json` to avoid duplicate environments.
+1. **Always use `--json`** so output can be parsed programmatically. Prefer `code`, `error`, `hint`, and `next` on failures. Create may also include `warnings[]` and `partial`.
+2. **Check before creating** — run `sandman list --json` to reuse *active* environments. A destroyed name can be recreated.
 3. **Surface credentials cleanly** — after `sandman connect`, format non-secret values as a `.env` block. Do not request `--show-secrets` unless the user explicitly asks.
 4. **Remind about teardown** — always mention `sandman destroy <name>` after provisioning to avoid cloud charges.
-5. **Don't re-initialize** — skip `sandman init` if the provider is already listed in `sandman list --json`.
-6. **Confirm before destroy** — ask the user, then run `sandman destroy <name> -y --json`. `--json` without `-y` returns `CONFIRMATION_REQUIRED` and does not prompt.
-7. **Honor experimental providers** — if `sandman providers --json` marks a provider `experimental`, tell the user it will not provision cloud resources yet.
+5. **Don't treat list as init** — `sandman list --json` is environments only. Run `sandman init` when create returns `NO_PROVIDER`.
+6. **Confirm before destroy** — ask the user, then run `sandman destroy <name> -y --json`. `--json` without `-y` returns `CONFIRMATION_REQUIRED` and does not prompt. Successful destroy recycles the name.
+7. **Honor experimental providers** — if `sandman providers --json` marks a provider `experimental`, tell the user it only writes a local registry.
 8. **Azure is coming soon** — suggest AWS or GCP as alternatives.
 
 ## Project Structure

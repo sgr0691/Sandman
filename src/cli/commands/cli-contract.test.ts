@@ -114,4 +114,70 @@ describe("CLI commands", () => {
     const aws = parsed.providers.find((p: { id: string }) => p.id === "aws");
     expect(aws.maturity).toBe("supported");
   });
+
+  it("allows recreate after destroy via dry-run", async () => {
+    const store = new StateStore(testConfigPath);
+    await store.saveEnvironment({
+      name: "demo",
+      provider: "aws",
+      status: "destroyed",
+      services: [],
+      resources: {},
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    await createEnvironment("demo", { provider: "aws" }, store, {
+      json: true,
+      dryRun: true,
+    });
+
+    const parsed = JSON.parse(String(log.mock.calls[0][0]));
+    expect(parsed.success).toBe(true);
+    expect(parsed.dryRun).toBe(true);
+    expect(parsed.name).toBe("demo");
+  });
+
+  it("rejects recreate when the existing record is still active", async () => {
+    const store = new StateStore(testConfigPath);
+    await store.saveEnvironment({
+      name: "demo",
+      provider: "aws",
+      status: "active",
+      services: [],
+      resources: {},
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    mockExit();
+
+    await expect(
+      createEnvironment("demo", { provider: "aws" }, store, {
+        json: true,
+        dryRun: true,
+      }),
+    ).rejects.toThrow(/EXIT:1/);
+
+    const parsed = JSON.parse(String(log.mock.calls[0][0]));
+    expect(parsed.code).toBe("ALREADY_EXISTS");
+  });
+
+  it("passes the requested region through dry-run create", async () => {
+    const store = new StateStore(testConfigPath);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await createEnvironment(
+      "demo",
+      { provider: "aws", region: "eu-west-1" },
+      store,
+      { json: true, dryRun: true },
+    );
+
+    const parsed = JSON.parse(String(log.mock.calls[0][0]));
+    expect(parsed.success).toBe(true);
+    expect(parsed.region).toBe("eu-west-1");
+  });
 });

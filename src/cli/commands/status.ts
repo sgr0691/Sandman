@@ -1,5 +1,6 @@
 import chalk from "chalk";
 import { StateStore } from "../../core/state-store.js";
+import { getAdapter } from "../../providers/index.js";
 import {
   calculateRunningCost,
   formatCost,
@@ -16,14 +17,20 @@ export async function statusEnvironment(
   store: StateStore,
   options: StatusOptions = {},
 ): Promise<void> {
-  const env = await store.getEnvironment(name);
+  const stored = await store.getEnvironment(name);
 
-  if (!env) {
+  if (!stored) {
     emitErr(options.json, {
       code: "NOT_FOUND",
       error: `Environment "${name}" not found.`,
       next: ["sandman list --json"],
     });
+  }
+
+  const adapter = getAdapter(stored.provider);
+  const env = await adapter.getStatus(stored);
+  if (env.status !== stored.status || env.error !== stored.error) {
+    await store.saveEnvironment(env);
   }
 
   const runningCost = calculateRunningCost(

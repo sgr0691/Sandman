@@ -12,6 +12,9 @@ describe('StateStore', () => {
     try {
       await fs.unlink(testConfigPath);
     } catch {}
+    try {
+      await fs.unlink(`${testConfigPath}.lock`);
+    } catch {}
     store = new StateStore(testConfigPath);
   });
 
@@ -226,5 +229,31 @@ describe('StateStore', () => {
       expect(config.provider).toBe('gcp');
       expect(config.defaultRegion).toBe('us-central1');
     });
+  });
+
+  describe('state lock', () => {
+    it('steals a stale lock and completes the write', async () => {
+      const fs = await import('fs/promises');
+      const lockPath = `${testConfigPath}.lock`;
+      await fs.writeFile(lockPath, '99999');
+      const stale = new Date(Date.now() - 31_000);
+      await fs.utimes(lockPath, stale, stale);
+
+      await store.save({ version: '1.0.0', environments: {} });
+      const content = await fs.readFile(testConfigPath, 'utf-8');
+      expect(JSON.parse(content).version).toBe('1.0.0');
+    });
+
+    it('throws STATE_LOCKED when another process holds a fresh lock', async () => {
+      const fs = await import('fs/promises');
+      await fs.writeFile(`${testConfigPath}.lock`, '1');
+
+      await expect(
+        store.save({ version: '1.0.0', environments: {} }),
+      ).rejects.toMatchObject({
+        name: 'StateError',
+        code: 'STATE_LOCKED',
+      });
+    }, 10_000);
   });
 });

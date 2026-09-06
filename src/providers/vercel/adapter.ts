@@ -4,6 +4,11 @@ import { logger } from "../../utils/logger.js";
 
 export class VercelAdapter implements ProviderAdapter {
   private teamId: string | null = null;
+  private region: string | undefined;
+
+  setRegion(region: string): void {
+    this.region = region;
+  }
 
   async init(): Promise<void> {
     const token = process.env.VERCEL_TOKEN;
@@ -44,6 +49,7 @@ export class VercelAdapter implements ProviderAdapter {
       name,
       provider: "vercel",
       projectId: projectName,
+      region: this.region,
       status: "active",
       services: [],
       resources: {

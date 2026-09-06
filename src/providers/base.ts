@@ -2,6 +2,8 @@ import { EnvironmentRecord, ServiceName } from "../types/index.js";
 
 export interface ProviderAdapter {
   init(): Promise<void>;
+  /** Optional. CLI `-r` / stored default region. Must not change `createEnvironment(name)`. */
+  setRegion?(region: string): void;
   createEnvironment(name: string): Promise<EnvironmentRecord>;
   enableServices(
     env: EnvironmentRecord,

@@ -69,6 +69,7 @@ export type Config = z.infer<typeof ConfigSchema>;
 
 export interface ProviderAdapter {
   init(): Promise<void>;
+  setRegion?(region: string): void;
   createEnvironment(name: string): Promise<EnvironmentRecord>;
   enableServices(
     env: EnvironmentRecord,

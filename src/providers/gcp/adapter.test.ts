@@ -226,6 +226,24 @@ describe("GcpAdapter", () => {
         "Project ID is required to destroy environment",
       );
     });
+
+    it("should refuse to delete projects that are not sandman-prefixed", async () => {
+      const env = {
+        name: "test",
+        provider: "gcp" as const,
+        status: "active" as const,
+        services: [],
+        resources: {},
+        projectId: "my-production-project",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      await expect(adapter.destroyEnvironment(env)).rejects.toThrow(
+        /expected sandman- prefix/,
+      );
+      expect(mockDeleteProject).not.toHaveBeenCalled();
+    });
   });
 
   describe("getStatus", () => {

@@ -78,4 +78,36 @@ describe("CLI output contract", () => {
       "AUTH_REQUIRED",
     );
   });
+
+  it("maps Cloudflare and Vercel token errors to AUTH_REQUIRED", () => {
+    expect(
+      mapThrownError(
+        new Error("CLOUDFLARE_API_TOKEN environment variable is required"),
+      ).code,
+    ).toBe("AUTH_REQUIRED");
+    expect(
+      mapThrownError(new Error("authentication failed")).code,
+    ).toBe("AUTH_REQUIRED");
+    expect(
+      mapThrownError(new Error("VERCEL_TOKEN is missing")).code,
+    ).toBe("AUTH_REQUIRED");
+    expect(mapThrownError(new Error("api-token expired")).code).toBe(
+      "AUTH_REQUIRED",
+    );
+  });
+
+  it("does not treat a bare required as AUTH_REQUIRED", () => {
+    expect(mapThrownError(new Error("bucket name is required")).code).toBe(
+      "PROVIDER_ERROR",
+    );
+  });
+
+  it("maps STATE_LOCKED from StateError", () => {
+    expect(
+      mapThrownError(new StateError("locked", "STATE_LOCKED")),
+    ).toEqual({
+      code: "STATE_LOCKED",
+      error: "locked",
+    });
+  });
 });

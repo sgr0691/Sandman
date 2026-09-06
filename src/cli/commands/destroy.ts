@@ -62,11 +62,7 @@ export async function destroyEnvironment(
     const adapter = getAdapter(env.provider);
     await adapter.destroyEnvironment(env);
 
-    const now = new Date().toISOString();
-    env.status = 'destroyed';
-    env.updatedAt = now;
-
-    await store.saveEnvironment(env);
+    await store.deleteEnvironment(name);
 
     emitOk(params.json, { name, status: 'destroyed' }, () => {
       spinner!.succeed(chalk.green(`✓ Environment "${name}" destroyed.`));
