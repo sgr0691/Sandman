@@ -8,75 +8,53 @@
  |____/ \__,_|_| |_|\__,_|_| |_| |_|\__,_|_| |_|
 ```
 
-Provision disposable cloud environments in seconds.
+**Disposable cloud environments in seconds.**
 
-Sandman is an open-source CLI that creates disposable cloud environments for AWS and GCP in seconds.
+Sandman is an open-source CLI that provisions clean, isolated environments on
+AWS, GCP, Cloudflare, and Vercel — no billing setup, IAM wrangling, or API
+configuration. Spin one up for a demo or experiment, tear it down when you're
+done.
 
-Perfect for:
+- **DevTool demos** — a fresh environment for every product demo
+- **AI builders** — test infrastructure without touching production
+- **Rapid prototyping** — go from idea to a running cloud in seconds
+- **Experimentation** — learn cloud services on throwaway infrastructure
 
-- DevTool demos
-- AI builders testing infrastructure
-- Rapid prototyping
-- Disposable sandbox environments
-- Infrastructure experimentation
-
-Instead of manually configuring billing, IAM, APIs, and services, Sandman spins up a working environment instantly.
-
----
-
-## Why Sandman?
-
-Creating cloud infrastructure manually is slow.
-
-Even experienced engineers must:
-
-### AWS
-
-• configure IAM  
-• create VPCs  
-• provision compute  
-• configure credentials
-
-### GCP
-
-• create a project  
-• connect billing  
-• enable APIs  
-• configure service accounts
-
-This can take **30–90 minutes**.
-
-Sandman reduces that to **seconds**.
+All commands accept `--json` for machine-readable output, built for humans and agents alike.
 
 ---
 
-## Features
+## Quick start
 
-• Create disposable cloud environments  
-• Automatic project provisioning  
-• Billing configuration helpers  
-• Enable common cloud services  
-• Credential management  
-• Environment teardown  
-• Machine-readable `--json` output for humans and agents  
+```bash
+sandman init gcp                          # authenticate and configure credentials
+sandman create demo                       # provision a new environment
+sandman enable compute storage cloudrun   # turn on the services you need
+sandman connect demo                      # print environment credentials
+sandman destroy demo                      # delete everything when finished
+```
 
-Supported providers:
+For AWS, enable services with `sandman enable ec2 s3 lambda`.
 
-- AWS (supported)
-- GCP (supported)
+---
 
-Experimental (auth + local registry only):
+## Commands
 
-- Cloudflare
-- Vercel
-
-Run `sandman providers` to see the live capability matrix.
+| Command | Description |
+| --- | --- |
+| `sandman init <provider>` | Authenticate and configure credentials |
+| `sandman create <name>` | Provision a new environment (supports `--ttl`, `--dry-run`) |
+| `sandman enable <services...>` | Enable services in the environment |
+| `sandman list` | List environments |
+| `sandman status <name>` | Show status, resources, and estimated cost |
+| `sandman connect <name>` | Output environment credentials |
+| `sandman destroy <name>` | Delete the environment and all resources |
+| `sandman providers` | Show the live provider capability matrix |
+| `sandman doctor` | Check init state, auth, and reap expired environments (`--reap`) |
 
 ---
 
 ## Installation
-
-### Using npm
 
 ```bash
 npm install -g @itssergio91/sandman
@@ -90,278 +68,35 @@ npx @itssergio91/sandman
 
 ---
 
-## Quick Start
-
-Initialize a cloud provider.
-
-```bash
-sandman init gcp
-```
-
-Create a sandbox environment.
-
-```bash
-sandman create demo
-```
-
-Enable services.
-
-```bash
-sandman enable compute storage cloudrun
-```
-
-Check status and connect.
-
-```bash
-sandman status demo
-sandman connect demo
-```
-
-Destroy the environment when finished.
-
-```bash
-sandman destroy demo
-```
-
----
-
-## Example Workflow
-
-Create a sandbox for testing.
-
-```bash
-sandman init gcp
-sandman create demo-env
-sandman enable compute storage cloudrun
-sandman connect demo-env
-```
-
-Run your application or tests against the environment.
-
-Then destroy it when finished.
-
-```bash
-sandman destroy demo-env
-```
-
----
-
-## Commands
-
-All commands accept `--json` for machine-readable output. JSON errors use `{ success: false, code, error, hint?, next? }`.
-
-### List providers
-
-```bash
-sandman providers
-sandman providers --json
-```
-
-Shows which providers are fully supported vs experimental.
-
-### Initialize provider
-
-```bash
-sandman init gcp
-sandman init gcp --billing-account XXXXXX-XXXXXX-XXXXXX --json
-sandman init aws --region us-west-2 --json
-```
-
-Authenticates and configures credentials.
-
----
-
-### Create environment
-
-```bash
-sandman create <environment-name>
-sandman create demo --provider aws --dry-run
-sandman create demo -p gcp -r us-central1 --billing-account XXXXXX-XXXXXX-XXXXXX --json
-sandman create demo --provider aws --ttl 2h --strict --json
-```
-
-Names must be lowercase letters, digits, and hyphens (max 31 characters).
-
-AWS create persists whatever IDs were provisioned. If some steps fail, JSON includes `partial: true` and `warnings`; `environment.status` is `failed`. Destroy those leftovers, then recreate. Agents should pass `--strict` so a failed create exits non-zero (`code: PARTIAL`).
-
-`--ttl 30m|2h|1d` stores `expiresAt`. Status, connect, and enable destroy the environment when the TTL elapses (`sandman doctor --reap` reaps all expired).
-
-The `-r` / stored default region is passed to the provider (AWS honors it). GCP create links billing from `--billing-account`, `GCP_BILLING_ACCOUNT`, or the parent project; without billing the project is saved as `failed`.
-
----
-
-### Enable services
-
-AWS example:
-
-```bash
-sandman enable ec2 s3 lambda -e demo
-```
-
-GCP example:
-
-```bash
-sandman enable compute storage cloudrun -e demo
-```
-
-`enable` returns `mode`, `provisioned`, and `localOnly`. GCP enable hits Service Usage APIs. AWS records `s3`/`ec2`/`iam` as already created by `create`; `lambda` is local-only. Cloudflare and Vercel enable is local-only.
-
----
-
-### List environments
-
-```bash
-sandman list
-sandman list --json
-```
-
-`--json` is a raw array of environments (not wrapped, not init state). `sandman init` is separate.
-
----
-
-### Environment status
-
-```bash
-sandman status demo
-sandman status demo --json
-```
-
-Shows provider, status, age, resources, and estimated cost. Status refreshes from the cloud (GCP project lifecycle; AWS instance/bucket) and saves if it changed. Expired TTL environments are destroyed.
-
-### Doctor / whoami
-
-```bash
-sandman doctor
-sandman doctor --json
-sandman whoami --json
-sandman doctor --reap --json
-```
-
-Prints init state, region, billing, caller identity, lock file, auth presence, and expired environments. `--reap` destroys expired sandboxes.
-
----
-
-### Connect environment
-
-```bash
-sandman connect demo
-sandman connect demo --json
-```
-
-Outputs environment variables. Secret values (API tokens) are redacted by default. Pass `--show-secrets` only when you intentionally need the raw token.
-
----
-
-### Destroy environment
-
-```bash
-sandman destroy demo
-sandman destroy demo -y --json
-```
-
-Deletes associated cloud resources, then removes the local record so the name can be reused. `--json` never prompts; pass `-y` to confirm.
-
----
-
-## Architecture
-
-Sandman consists of three layers.
-
-CLI  
-↓  
-Provisioning Engine  
-↓  
-Cloud Provider APIs
-
-Components:
-
-- CLI layer
-- Provisioning engine
-- Provider adapters
-
----
-
 ## Providers
 
-### AWS
+| Provider | Status |
+| --- | --- |
+| AWS | ✅ Supported |
+| GCP | ✅ Supported |
+| Cloudflare | 🧪 Experimental |
+| Vercel | 🧪 Experimental |
+| DigitalOcean | 🚧 Planned |
+| Render | 🚧 Planned |
 
-Uses AWS SDK to provision:
-
-- VPC
-- EC2
-- S3 (public access blocked, SSE-S3 encryption)
-- IAM roles (SSM, no public SSH)
-
-### GCP
-
-Uses Google Cloud APIs to provision:
-
-- projects
-- billing connections
-- API enablement
-- service accounts (planned)
-- storage buckets (planned)
-
----
-
-## Use Cases
-
-### DevTool demos
-
-Create disposable environments for product demos.
-
-### Rapid experimentation
-
-Spin up temporary environments to test infrastructure or integrations.
-
-### Learning cloud infrastructure
-
-Practice working with cloud services without maintaining long-lived infrastructure.
-
----
-
-## Project Structure
-
-```
-sandman/
-
-src/
-  cli/
-  core/
-  providers/
-  utils/
-
-package.json
-```
+Run `sandman providers` to see the live capability matrix.
 
 ---
 
 ## Roadmap
 
-Planned features:
+- Environment templates
+- Multi-cloud provisioning (Cloudflare / Vercel beyond experimental)
+- GitHub demo environments
+- Local testing environments
 
-• Environment templates  
-• Multi-cloud provisioning (Cloudflare / Vercel beyond experimental)  
-• GitHub demo environments  
-• Local testing environments
+See the [issue tracker](https://github.com/BoringInfraCo/Sandman/issues) for the full list.
 
 ---
 
 ## Contributing
 
-Pull requests are welcome.
-
-To contribute:
-
-```bash
-git clone https://github.com/BoringInfraCo/Sandman.git
-cd Sandman
-npm install
-npm test
-npm run dev
-```
-
----
+Pull requests are welcome. Clone the repo, run `npm install` and `npm test`, and open a PR.
 
 ## License
 

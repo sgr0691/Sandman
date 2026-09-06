@@ -1,7 +1,7 @@
 {
   "name": "@itssergio91/sandman",
   "version": "0.2.0",
-  "description": "Provision disposable cloud environments in seconds",
+  "description": "Disposable cloud environments in seconds — for AWS, GCP, Cloudflare, and Vercel",
   "main": "dist/index.js",
   "type": "module",
   "bin": {
