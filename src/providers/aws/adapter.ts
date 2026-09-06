@@ -1,9 +1,15 @@
 import { ProviderAdapter } from "../base.js";
-import { EnvironmentRecord, ServiceName } from "../../types/index.js";
+import {
+  EnableResult,
+  EnvironmentRecord,
+  ServiceName,
+} from "../../types/index.js";
+import { enableResult } from "../enable-result.js";
 import { logger } from "../../utils/logger.js";
 
 export class AwsAdapter implements ProviderAdapter {
   private accountId: string | null = null;
+  private callerArn: string | null = null;
   private region: string = "us-east-1";
   private regionExplicit = false;
 
@@ -17,6 +23,7 @@ export class AwsAdapter implements ProviderAdapter {
       const response = await client.send(command);
 
       this.accountId = response.Account || null;
+      this.callerArn = response.Arn || null;
       if (!this.regionExplicit) {
         this.region = process.env.AWS_DEFAULT_REGION || "us-east-1";
       }
@@ -471,8 +478,66 @@ export class AwsAdapter implements ProviderAdapter {
   async enableServices(
     env: EnvironmentRecord,
     services: ServiceName[],
-  ): Promise<void> {
-    logger.info(`Enabling AWS services: ${services.join(", ")}`);
+  ): Promise<EnableResult> {
+    const provisioned: ServiceName[] = [];
+    const localOnly: ServiceName[] = [];
+    const warnings: string[] = [];
+
+    const alreadyInCloud: Record<string, boolean> = {
+      s3: Boolean(env.resources.bucketName),
+      ec2: Boolean(env.resources.instanceId),
+      iam: Boolean(
+        env.resources.iamRoleArn || env.resources.iamInstanceProfile,
+      ),
+    };
+
+    for (const service of services) {
+      if (alreadyInCloud[service]) {
+        provisioned.push(service);
+        continue;
+      }
+      localOnly.push(service);
+      if (service === "lambda") {
+        warnings.push(
+          "lambda is not provisioned by sandman enable; recorded locally only.",
+        );
+      } else if (service === "s3" || service === "ec2" || service === "iam") {
+        warnings.push(
+          `${service} was not created by sandman create; recorded locally only.`,
+        );
+      } else {
+        warnings.push(
+          `${service} is recorded locally only and was not provisioned in AWS.`,
+        );
+      }
+    }
+
+    logger.info(
+      `AWS enable recorded ${services.join(", ")} (cloud: ${provisioned.join(", ") || "none"}; local-only: ${localOnly.join(", ") || "none"})`,
+    );
+
+    return enableResult({
+      recorded: services,
+      provisioned,
+      localOnly,
+      warnings,
+    });
+  }
+
+  async whoami(): Promise<Record<string, string | null | undefined>> {
+    if (!this.accountId) {
+      try {
+        await this.init();
+      } catch {
+        // Leave identity empty; doctor will surface AUTH_REQUIRED.
+      }
+    }
+    return {
+      provider: "aws",
+      accountId: this.accountId,
+      region: this.region,
+      callerArn: this.callerArn,
+    };
   }
 
   async connect(env: EnvironmentRecord): Promise<Record<string, string>> {
@@ -690,6 +755,7 @@ export class AwsAdapter implements ProviderAdapter {
     const message = error?.message || "";
     return (
       name === "NoSuchBucket" ||
+      name === "NotFound" ||
       name === "NoSuchTagSet" ||
       name === "NoSuchEntity" ||
       name === "InvalidInstanceID.NotFound" ||
@@ -697,6 +763,7 @@ export class AwsAdapter implements ProviderAdapter {
       name === "InvalidGroup.NotFound" ||
       name === "InvalidSubnetID.NotFound" ||
       name === "InvalidInternetGatewayID.NotFound" ||
+      error?.$metadata?.httpStatusCode === 404 ||
       /not found|does not exist/i.test(message)
     );
   }
@@ -859,7 +926,86 @@ export class AwsAdapter implements ProviderAdapter {
   }
 
   async getStatus(env: EnvironmentRecord): Promise<EnvironmentRecord> {
-    return env;
+    const region = env.region || this.region;
+    const missing: string[] = [];
+    const unhealthy: string[] = [];
+
+    if (env.resources.bucketName) {
+      const bucket = env.resources.bucketName as string;
+      try {
+        const { S3Client, HeadBucketCommand } =
+          await import("@aws-sdk/client-s3");
+        const s3 = new S3Client({ region });
+        await s3.send(new HeadBucketCommand({ Bucket: bucket }));
+      } catch (error: any) {
+        if (this.isMissingAwsResource(error)) {
+          missing.push(`bucket ${bucket}`);
+        } else {
+          unhealthy.push(`bucket ${bucket}: ${error.message}`);
+        }
+      }
+    }
+
+    if (env.resources.instanceId) {
+      const instanceId = env.resources.instanceId as string;
+      try {
+        const { EC2Client, DescribeInstancesCommand } =
+          await import("@aws-sdk/client-ec2");
+        const ec2 = new EC2Client({ region });
+        const described = await ec2.send(
+          new DescribeInstancesCommand({ InstanceIds: [instanceId] }),
+        );
+        const instance = described.Reservations?.[0]?.Instances?.[0];
+        const state = instance?.State?.Name;
+        if (!instance || state === "terminated" || state === "shutting-down") {
+          missing.push(`instance ${instanceId}`);
+        } else if (state && state !== "running" && state !== "pending") {
+          unhealthy.push(`instance ${instanceId} is ${state}`);
+        }
+      } catch (error: any) {
+        if (this.isMissingAwsResource(error)) {
+          missing.push(`instance ${instanceId}`);
+        } else {
+          unhealthy.push(`instance ${instanceId}: ${error.message}`);
+        }
+      }
+    }
+
+    const tracked =
+      Boolean(env.resources.bucketName) || Boolean(env.resources.instanceId);
+    if (!tracked) {
+      return env;
+    }
+
+    const now = new Date().toISOString();
+    if (missing.length > 0 && unhealthy.length === 0) {
+      const allGone =
+        (!env.resources.bucketName ||
+          missing.some((m) => m.startsWith("bucket "))) &&
+        (!env.resources.instanceId ||
+          missing.some((m) => m.startsWith("instance ")));
+      return {
+        ...env,
+        status: allGone ? "destroyed" : "failed",
+        error: `Cloud resources missing: ${missing.join("; ")}`,
+        updatedAt: now,
+      };
+    }
+    if (missing.length > 0 || unhealthy.length > 0) {
+      return {
+        ...env,
+        status: "failed",
+        error: [...missing.map((m) => `missing ${m}`), ...unhealthy].join("; "),
+        updatedAt: now,
+      };
+    }
+
+    return {
+      ...env,
+      status: "active",
+      error: undefined,
+      updatedAt: now,
+    };
   }
 
   getAccountInfo(): { accountId: string | null; region: string } {

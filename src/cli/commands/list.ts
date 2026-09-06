@@ -33,6 +33,9 @@ export async function listEnvironments(store: StateStore, options: ListOptions =
       console.log(`    Provider: ${env.provider}`);
       console.log(`    Status: ${statusColor(env.status)}`);
       console.log(`    Created: ${new Date(env.createdAt).toLocaleString()}`);
+      if (env.expiresAt) {
+        console.log(`    Expires: ${new Date(env.expiresAt).toLocaleString()}${env.ttl ? ` (${env.ttl})` : ""}`);
+      }
       if (env.services.length > 0) {
         console.log(`    Services: ${env.services.join(', ')}`);
       }

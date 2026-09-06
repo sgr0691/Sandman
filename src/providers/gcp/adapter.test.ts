@@ -6,6 +6,9 @@ const mockCreateProject = vi.fn();
 const mockGetProject = vi.fn();
 const mockDeleteProject = vi.fn();
 const mockGetOperation = vi.fn();
+const mockGetProjectBillingInfo = vi.fn();
+const mockListBillingAccounts = vi.fn();
+const mockUpdateProjectBillingInfo = vi.fn();
 
 vi.mock("@google-cloud/resource-manager", () => ({
   ProjectsClient: vi.fn().mockImplementation(() => ({
@@ -17,6 +20,14 @@ vi.mock("@google-cloud/resource-manager", () => ({
     getProject: mockGetProject,
     createProject: mockCreateProject,
     deleteProject: mockDeleteProject,
+  })),
+}));
+
+vi.mock("@google-cloud/billing", () => ({
+  CloudBillingClient: vi.fn().mockImplementation(() => ({
+    getProjectBillingInfo: mockGetProjectBillingInfo,
+    listBillingAccounts: mockListBillingAccounts,
+    updateProjectBillingInfo: mockUpdateProjectBillingInfo,
   })),
 }));
 
@@ -43,6 +54,14 @@ describe("GcpAdapter", () => {
       { projectId: "sandman-test-env-123456789", projectNumber: "1234567890" },
     ]);
     mockDeleteProject.mockResolvedValue([mockOperation]);
+    mockGetProjectBillingInfo.mockResolvedValue([
+      {
+        billingAccountName: "billingAccounts/AAAAAA-BBBBBB-CCCCCC",
+        billingEnabled: true,
+      },
+    ]);
+    mockListBillingAccounts.mockResolvedValue([[]]);
+    mockUpdateProjectBillingInfo.mockResolvedValue([{}]);
     adapter = new GcpAdapter();
   });
 
@@ -78,6 +97,8 @@ describe("GcpAdapter", () => {
       expect(env.provider).toBe("gcp");
       expect(env.status).toBe("active");
       expect(env.projectId).toMatch(/^sandman-test-env-/);
+      expect(env.billingAccount).toBe("AAAAAA-BBBBBB-CCCCCC");
+      expect(mockUpdateProjectBillingInfo).toHaveBeenCalled();
     });
 
     it("should create actual GCP project via Resource Manager API", async () => {
@@ -105,6 +126,26 @@ describe("GcpAdapter", () => {
       await expect(freshAdapter.createEnvironment("test-env")).rejects.toThrow(
         "No GCP project configured",
       );
+    });
+
+    it("should mark the environment failed when billing cannot be linked", async () => {
+      mockGetProjectBillingInfo.mockRejectedValue(new Error("no billing"));
+      mockListBillingAccounts.mockResolvedValue([[]]);
+      await adapter.init();
+      const env = await adapter.createEnvironment("no-billing");
+      expect(env.status).toBe("failed");
+      expect(env.error).toMatch(/billing account/i);
+      expect(env.projectId).toMatch(/^sandman-no-billing-/);
+    });
+
+    it("should fail closed when linking billing throws", async () => {
+      adapter.setBillingAccount("ZZZZZZ-YYYYYY-XXXXXX");
+      mockUpdateProjectBillingInfo.mockRejectedValue(new Error("permission denied"));
+      await adapter.init();
+      const env = await adapter.createEnvironment("link-fail");
+      expect(env.status).toBe("failed");
+      expect(env.error).toMatch(/Failed to link billing account/);
+      expect(env.billingAccount).toBe("ZZZZZZ-YYYYYY-XXXXXX");
     });
   });
 

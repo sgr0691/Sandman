@@ -5,6 +5,7 @@ import { ServiceName } from "../../types/index.js";
 import { getAdapter } from "../../providers/index.js";
 import { SERVICES_BY_PROVIDER } from "../../providers/catalog.js";
 import { emitErr, emitOk, mapThrownError } from "../output.js";
+import { reapIfExpired } from "../reap.js";
 
 interface EnableOptions {
   json?: boolean;
@@ -57,6 +58,22 @@ export async function enableServices(
     env = active[0];
   }
 
+  const reap = await reapIfExpired(store, env);
+  if (reap.reaped) {
+    emitErr(options.json, {
+      code: "EXPIRED",
+      error: `Environment "${env.name}" exceeded its TTL and was destroyed.`,
+      next: [`sandman create ${env.name} --provider ${env.provider} --json`],
+    });
+  }
+  if (reap.error) {
+    emitErr(options.json, {
+      code: "PROVIDER_ERROR",
+      error: `Environment "${env.name}" is expired but destroy failed: ${reap.error}`,
+      next: [`sandman destroy ${env.name} -y --json`],
+    });
+  }
+
   const validServices = SERVICES_BY_PROVIDER[env.provider] ?? [];
   const invalid = servicesInput.filter((s) => !validServices.includes(s));
 
@@ -79,7 +96,7 @@ export async function enableServices(
 
   try {
     const adapter = getAdapter(env.provider);
-    await adapter.enableServices(env, servicesInput as ServiceName[]);
+    const result = await adapter.enableServices(env, servicesInput as ServiceName[]);
 
     const now = new Date().toISOString();
     env.services = [...new Set([...env.services, ...(servicesInput as ServiceName[])])];
@@ -89,9 +106,33 @@ export async function enableServices(
 
     emitOk(
       options.json,
-      { environment: env.name, services: env.services },
+      {
+        environment: env.name,
+        services: env.services,
+        mode: result.mode,
+        provisioned: result.provisioned,
+        localOnly: result.localOnly,
+        ...(result.warnings?.length ? { warnings: result.warnings } : {}),
+      },
       () => {
-        spinner!.succeed(chalk.green(`✓ Services enabled: ${servicesInput.join(", ")}`));
+        if (result.mode === "local-only") {
+          spinner!.warn(
+            chalk.yellow(
+              `Recorded ${servicesInput.join(", ")} locally (not provisioned in cloud).`,
+            ),
+          );
+        } else if (result.mode === "mixed") {
+          spinner!.warn(
+            chalk.yellow(
+              `Recorded services: cloud [${result.provisioned.join(", ") || "none"}]; local-only [${result.localOnly.join(", ") || "none"}].`,
+            ),
+          );
+        } else {
+          spinner!.succeed(chalk.green(`✓ Services enabled: ${servicesInput.join(", ")}`));
+        }
+        for (const warning of result.warnings ?? []) {
+          console.log(chalk.yellow(`⚠ ${warning}`));
+        }
       },
     );
   } catch (error: unknown) {

@@ -1,6 +1,15 @@
 import { ProviderAdapter, GCP_SERVICES } from "../base.js";
-import { EnvironmentRecord, ServiceName } from "../../types/index.js";
+import {
+  EnableResult,
+  EnvironmentRecord,
+  ServiceName,
+} from "../../types/index.js";
+import { enableResult } from "../enable-result.js";
 import { logger } from "../../utils/logger.js";
+
+function normalizeBillingAccountId(raw: string): string {
+  return raw.replace(/^billingAccounts\//, "");
+}
 
 export class GcpAdapter implements ProviderAdapter {
   private projectId: string | null = null;
@@ -10,6 +19,14 @@ export class GcpAdapter implements ProviderAdapter {
 
   setRegion(region: string): void {
     this.region = region;
+  }
+
+  setBillingAccount(accountId: string): void {
+    this.billingAccountId = normalizeBillingAccountId(accountId);
+  }
+
+  getBillingAccount(): string | null {
+    return this.billingAccountId;
   }
 
   async init(): Promise<void> {
@@ -61,6 +78,31 @@ export class GcpAdapter implements ProviderAdapter {
     }
   }
 
+  async discoverBillingAccount(): Promise<string | null> {
+    if (this.billingAccountId) {
+      return this.billingAccountId;
+    }
+    const fromEnv = process.env.GCP_BILLING_ACCOUNT;
+    if (fromEnv) {
+      this.billingAccountId = normalizeBillingAccountId(fromEnv);
+      return this.billingAccountId;
+    }
+    const discovered = await this.lookupBillingAccount(this.projectId);
+    if (discovered) {
+      this.billingAccountId = discovered;
+    }
+    return this.billingAccountId;
+  }
+
+  async whoami(): Promise<Record<string, string | null | undefined>> {
+    return {
+      provider: "gcp",
+      projectId: this.projectId,
+      region: this.region,
+      billingAccount: this.billingAccountId,
+    };
+  }
+
   async createEnvironment(name: string): Promise<EnvironmentRecord> {
     if (!this.projectId) {
       throw new Error(
@@ -68,7 +110,7 @@ export class GcpAdapter implements ProviderAdapter {
       );
     }
 
-    // Generate a unique project ID for the sandman environment
+    const parentProjectId = this.projectId;
     const timestamp = Date.now();
     const sandmanProjectId = `sandman-${name}-${timestamp}`;
 
@@ -76,7 +118,6 @@ export class GcpAdapter implements ProviderAdapter {
       const { ProjectsClient } = await import("@google-cloud/resource-manager");
       const resourceManagerClient = new ProjectsClient();
 
-      // Create the project
       const [operation] = await resourceManagerClient.createProject({
         project: {
           projectId: sandmanProjectId,
@@ -84,21 +125,32 @@ export class GcpAdapter implements ProviderAdapter {
         },
       });
 
-      // Wait for the operation to complete
-      const [projectOperation] = await operation.promise();
+      await operation.promise();
 
-      // Get the project details to get the project number
       const [project] = await resourceManagerClient.getProject({
         name: `projects/${sandmanProjectId}`,
       });
 
-      // Store the project ID and number
       this.projectId = sandmanProjectId;
       this.projectNumber = (project as any).projectNumber?.toString() || null;
 
-      // Link billing account if provided
+      const billingId =
+        this.billingAccountId ||
+        (await this.lookupBillingAccount(parentProjectId));
+      if (billingId) {
+        this.billingAccountId = billingId;
+      }
+
+      let billingError: string | undefined;
       if (this.billingAccountId) {
-        await this.linkBillingAccount(sandmanProjectId);
+        try {
+          await this.linkBillingAccount(sandmanProjectId);
+        } catch (error: any) {
+          billingError = error.message ?? String(error);
+        }
+      } else {
+        billingError =
+          "No billing account linked. Pass --billing-account, set GCP_BILLING_ACCOUNT, or enable billing on the parent project. GCP APIs cannot be enabled until billing is linked.";
       }
 
       const now = new Date().toISOString();
@@ -107,17 +159,58 @@ export class GcpAdapter implements ProviderAdapter {
         provider: "gcp",
         projectId: sandmanProjectId,
         region: this.region,
-        status: "active",
+        billingAccount: this.billingAccountId || undefined,
+        status: billingError ? "failed" : "active",
         services: [],
         resources: {},
         createdAt: now,
         updatedAt: now,
+        error: billingError,
       };
     } catch (error: any) {
       throw new Error(
         `Failed to create GCP project: ${error.message ?? "Unknown error"}`,
       );
     }
+  }
+
+  private async lookupBillingAccount(
+    parentProjectId?: string | null,
+  ): Promise<string | null> {
+    try {
+      const { CloudBillingClient } = await import("@google-cloud/billing");
+      const billingClient = new CloudBillingClient();
+
+      if (parentProjectId) {
+        try {
+          const [info] = await billingClient.getProjectBillingInfo({
+            name: `projects/${parentProjectId}`,
+          });
+          const name = info?.billingAccountName;
+          if (info?.billingEnabled && name) {
+            return normalizeBillingAccountId(name);
+          }
+        } catch {
+          // Parent may not have billing; fall through to account list.
+        }
+      }
+
+      const [accounts] = await billingClient.listBillingAccounts({});
+      const open = (accounts ?? []).filter((account) => account.open);
+      if (open.length === 1 && open[0].name) {
+        return normalizeBillingAccountId(open[0].name);
+      }
+      if (open.length > 1) {
+        logger.warn(
+          `Found ${open.length} open GCP billing accounts. Pass --billing-account to choose one.`,
+        );
+      }
+    } catch (error: any) {
+      logger.warn(
+        `Could not discover a GCP billing account: ${error.message ?? String(error)}`,
+      );
+    }
+    return null;
   }
 
   private async linkBillingAccount(projectId: string): Promise<void> {
@@ -129,7 +222,6 @@ export class GcpAdapter implements ProviderAdapter {
       const { CloudBillingClient } = await import("@google-cloud/billing");
       const billingClient = new CloudBillingClient();
 
-      // Update project billing info to link the billing account
       await billingClient.updateProjectBillingInfo({
         name: `projects/${projectId}`,
         projectBillingInfo: {
@@ -146,7 +238,7 @@ export class GcpAdapter implements ProviderAdapter {
   async enableServices(
     env: EnvironmentRecord,
     services: ServiceName[],
-  ): Promise<void> {
+  ): Promise<EnableResult> {
     if (!env.projectId) {
       throw new Error("Project ID is required to enable services");
     }
@@ -156,15 +248,19 @@ export class GcpAdapter implements ProviderAdapter {
         await import("@google-cloud/service-usage");
       const serviceUsageClient = new ServiceUsageClient();
 
-      const serviceNames = services.map((s) => GCP_SERVICES[s]).filter(Boolean);
+      const recorded = services.filter((s) => GCP_SERVICES[s]);
 
-      if (serviceNames.length === 0) {
-        return;
+      if (recorded.length === 0) {
+        return enableResult({
+          recorded: [],
+          provisioned: [],
+          localOnly: [],
+        });
       }
 
+      const serviceNames = recorded.map((s) => GCP_SERVICES[s]);
       logger.info(`Enabling GCP services: ${serviceNames.join(", ")}`);
 
-      // Enable each service
       for (const serviceName of serviceNames) {
         const request = {
           name: `projects/${env.projectId}/services/${serviceName}`,
@@ -172,6 +268,12 @@ export class GcpAdapter implements ProviderAdapter {
 
         await serviceUsageClient.enableService(request);
       }
+
+      return enableResult({
+        recorded,
+        provisioned: recorded,
+        localOnly: [],
+      });
     } catch (error: any) {
       throw new Error(
         `Failed to enable GCP services: ${error.message ?? "Unknown error"}`,
@@ -245,7 +347,10 @@ export class GcpAdapter implements ProviderAdapter {
       const lifecycleState = (project as any).lifecycleState;
       switch (lifecycleState) {
         case "ACTIVE":
-          status = "active";
+          status =
+            !env.billingAccount && /billing/i.test(env.error || "")
+              ? "failed"
+              : "active";
           break;
         case "DELETE_REQUESTED":
         case "DELETE_IN_PROGRESS":
@@ -271,10 +376,6 @@ export class GcpAdapter implements ProviderAdapter {
         updatedAt: new Date().toISOString(),
       };
     }
-  }
-
-  setBillingAccount(accountId: string): void {
-    this.billingAccountId = accountId;
   }
 
   getProjectId(): string | null {

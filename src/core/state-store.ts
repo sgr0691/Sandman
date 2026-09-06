@@ -41,7 +41,7 @@ export class StateStore {
   }
 
   private lockPath(): string {
-    return `${this.configPath}.lock`;
+    return this.getLockPath();
   }
 
   async load(): Promise<Config> {
@@ -78,22 +78,42 @@ export class StateStore {
     return Object.values(config.environments);
   }
 
-  async setProvider(provider: ProviderType, region?: string): Promise<void> {
+  getConfigPath(): string {
+    return this.configPath;
+  }
+
+  getLockPath(): string {
+    return `${this.configPath}.lock`;
+  }
+
+  async setProvider(
+    provider: ProviderType,
+    region?: string,
+    billingAccount?: string,
+  ): Promise<void> {
     await this.withLock(async () => {
       const config = await this.loadUnlocked();
       config.provider = provider;
       if (region) {
         config.defaultRegion = region;
       }
+      if (billingAccount) {
+        config.defaultBillingAccount = billingAccount;
+      }
       await this.saveUnlocked(config);
     });
   }
 
-  async getProvider(): Promise<{ provider?: ProviderType; region?: string }> {
+  async getProvider(): Promise<{
+    provider?: ProviderType;
+    region?: string;
+    billingAccount?: string;
+  }> {
     const config = await this.loadUnlocked();
     return {
       provider: config.provider,
       region: config.defaultRegion,
+      billingAccount: config.defaultBillingAccount,
     };
   }
 

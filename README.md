@@ -162,8 +162,8 @@ Shows which providers are fully supported vs experimental.
 ### Initialize provider
 
 ```bash
-sandman init aws
 sandman init gcp
+sandman init gcp --billing-account XXXXXX-XXXXXX-XXXXXX --json
 sandman init aws --region us-west-2 --json
 ```
 
@@ -176,14 +176,17 @@ Authenticates and configures credentials.
 ```bash
 sandman create <environment-name>
 sandman create demo --provider aws --dry-run
-sandman create demo -p gcp -r us-central1 --json
+sandman create demo -p gcp -r us-central1 --billing-account XXXXXX-XXXXXX-XXXXXX --json
+sandman create demo --provider aws --ttl 2h --strict --json
 ```
 
 Names must be lowercase letters, digits, and hyphens (max 31 characters).
 
-AWS create persists whatever IDs were provisioned. If some steps fail, JSON includes `partial: true` and `warnings`; `environment.status` is `failed`. Destroy those leftovers, then recreate.
+AWS create persists whatever IDs were provisioned. If some steps fail, JSON includes `partial: true` and `warnings`; `environment.status` is `failed`. Destroy those leftovers, then recreate. Agents should pass `--strict` so a failed create exits non-zero (`code: PARTIAL`).
 
-The `-r` / stored default region is passed to the provider (AWS honors it).
+`--ttl 30m|2h|1d` stores `expiresAt`. Status, connect, and enable destroy the environment when the TTL elapses (`sandman doctor --reap` reaps all expired).
+
+The `-r` / stored default region is passed to the provider (AWS honors it). GCP create links billing from `--billing-account`, `GCP_BILLING_ACCOUNT`, or the parent project; without billing the project is saved as `failed`.
 
 ---
 
@@ -200,6 +203,8 @@ GCP example:
 ```bash
 sandman enable compute storage cloudrun -e demo
 ```
+
+`enable` returns `mode`, `provisioned`, and `localOnly`. GCP enable hits Service Usage APIs. AWS records `s3`/`ec2`/`iam` as already created by `create`; `lambda` is local-only. Cloudflare and Vercel enable is local-only.
 
 ---
 
@@ -221,7 +226,18 @@ sandman status demo
 sandman status demo --json
 ```
 
-Shows provider, status, age, resources, and estimated cost. Status refreshes from the cloud when the adapter supports it (GCP project lifecycle) and saves if it changed.
+Shows provider, status, age, resources, and estimated cost. Status refreshes from the cloud (GCP project lifecycle; AWS instance/bucket) and saves if it changed. Expired TTL environments are destroyed.
+
+### Doctor / whoami
+
+```bash
+sandman doctor
+sandman doctor --json
+sandman whoami --json
+sandman doctor --reap --json
+```
+
+Prints init state, region, billing, caller identity, lock file, auth presence, and expired environments. `--reap` destroys expired sandboxes.
 
 ---
 
@@ -338,7 +354,7 @@ Pull requests are welcome.
 To contribute:
 
 ```bash
-git clone https://github.com/sgr0691/Sandman.git
+git clone https://github.com/BoringInfraCo/Sandman.git
 cd Sandman
 npm install
 npm test

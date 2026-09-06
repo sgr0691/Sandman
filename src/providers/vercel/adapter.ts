@@ -1,5 +1,10 @@
 import { ProviderAdapter, VERCEL_SERVICES } from "../base.js";
-import { EnvironmentRecord, ServiceName } from "../../types/index.js";
+import {
+  EnableResult,
+  EnvironmentRecord,
+  ServiceName,
+} from "../../types/index.js";
+import { localOnlyEnable } from "../enable-result.js";
 import { logger } from "../../utils/logger.js";
 
 export class VercelAdapter implements ProviderAdapter {
@@ -63,11 +68,24 @@ export class VercelAdapter implements ProviderAdapter {
   async enableServices(
     env: EnvironmentRecord,
     services: ServiceName[],
-  ): Promise<void> {
+  ): Promise<EnableResult> {
     const enabledServices = services
       .map((s) => VERCEL_SERVICES[s])
       .filter(Boolean);
     logger.info(`Enabling Vercel services: ${enabledServices.join(", ")}`);
+    return localOnlyEnable(
+      "vercel",
+      services.filter((s) => VERCEL_SERVICES[s]),
+      "vercel is experimental: enable records services locally and does not provision cloud resources.",
+    );
+  }
+
+  async whoami(): Promise<Record<string, string | null | undefined>> {
+    return {
+      provider: "vercel",
+      teamId: this.teamId,
+      token: process.env.VERCEL_TOKEN ? "set" : "missing",
+    };
   }
 
   async connect(env: EnvironmentRecord): Promise<Record<string, string>> {

@@ -140,7 +140,13 @@ function mockHappyPath(): void {
         return { Vpcs: [{ Tags: sandmanTagSet }] };
       case "DescribeInstancesCommand":
         return {
-          Reservations: [{ Instances: [{ Tags: sandmanTagSet }] }],
+          Reservations: [
+            {
+              Instances: [
+                { Tags: sandmanTagSet, State: { Name: "running" } },
+              ],
+            },
+          ],
         };
       default:
         return {};
@@ -376,8 +382,28 @@ describe("AwsAdapter", () => {
     });
   });
 
+  describe("enableServices", () => {
+    it("records lambda as local-only and s3 as already provisioned", async () => {
+      const env: EnvironmentRecord = {
+        name: "test",
+        provider: "aws",
+        status: "active",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        region: "us-east-1",
+        services: [],
+        resources: { bucketName: "sandman-test-1", instanceId: "i-1234" },
+      };
+      const result = await adapter.enableServices(env, ["s3", "ec2", "lambda"]);
+      expect(result.mode).toBe("mixed");
+      expect(result.provisioned).toEqual(["s3", "ec2"]);
+      expect(result.localOnly).toEqual(["lambda"]);
+      expect(result.warnings?.[0]).toMatch(/lambda is not provisioned/);
+    });
+  });
+
   describe("getStatus", () => {
-    it("should return the environment as-is", async () => {
+    it("should return the environment as-is when no cloud IDs are tracked", async () => {
       const env: EnvironmentRecord = {
         name: "test",
         provider: "aws",
@@ -390,6 +416,46 @@ describe("AwsAdapter", () => {
       };
       const result = await adapter.getStatus(env);
       expect(result).toEqual(env);
+    });
+
+    it("should stay active when the instance is running and the bucket exists", async () => {
+      const env: EnvironmentRecord = {
+        name: "test",
+        provider: "aws",
+        status: "failed",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        region: "us-east-1",
+        services: [],
+        resources: { bucketName: "sandman-test-1", instanceId: "i-1234" },
+        error: "old",
+      };
+      const result = await adapter.getStatus(env);
+      expect(result.status).toBe("active");
+      expect(result.error).toBeUndefined();
+    });
+
+    it("should mark destroyed when instance and bucket are gone", async () => {
+      s3Send.mockRejectedValue({ name: "NotFound", message: "Not Found" });
+      ec2Send.mockImplementation(async (command: { constructor: { name: string } }) => {
+        if (command.constructor.name === "DescribeInstancesCommand") {
+          return { Reservations: [{ Instances: [{ State: { Name: "terminated" } }] }] };
+        }
+        return {};
+      });
+      const env: EnvironmentRecord = {
+        name: "test",
+        provider: "aws",
+        status: "active",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        region: "us-east-1",
+        services: [],
+        resources: { bucketName: "sandman-test-1", instanceId: "i-1234" },
+      };
+      const result = await adapter.getStatus(env);
+      expect(result.status).toBe("destroyed");
+      expect(result.error).toMatch(/missing/i);
     });
   });
 });

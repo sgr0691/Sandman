@@ -29,7 +29,7 @@ export const PROVIDER_CATALOG: ProviderInfo[] = [
     maturity: "supported",
     services: Object.keys(GCP_SERVICES),
     auth: "gcloud auth application-default login, or GOOGLE_APPLICATION_CREDENTIALS",
-    notes: "Creates a GCP project and enables APIs. Requires a billing account for most resources.",
+    notes: "Creates a GCP project and links billing when a billing account can be resolved. Requires a billing account for APIs to work.",
   },
   {
     id: "cloudflare",

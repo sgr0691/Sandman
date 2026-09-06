@@ -1,5 +1,10 @@
 import { ProviderAdapter, CLOUDFLARE_SERVICES } from "../base.js";
-import { EnvironmentRecord, ServiceName } from "../../types/index.js";
+import {
+  EnableResult,
+  EnvironmentRecord,
+  ServiceName,
+} from "../../types/index.js";
+import { localOnlyEnable } from "../enable-result.js";
 import { logger } from "../../utils/logger.js";
 
 export class CloudflareAdapter implements ProviderAdapter {
@@ -79,11 +84,24 @@ export class CloudflareAdapter implements ProviderAdapter {
   async enableServices(
     env: EnvironmentRecord,
     services: ServiceName[],
-  ): Promise<void> {
+  ): Promise<EnableResult> {
     const enabledServices = services
       .map((s) => CLOUDFLARE_SERVICES[s])
       .filter(Boolean);
     logger.info(`Enabling Cloudflare services: ${enabledServices.join(", ")}`);
+    return localOnlyEnable(
+      "cloudflare",
+      services.filter((s) => CLOUDFLARE_SERVICES[s]),
+      "cloudflare is experimental: enable records services locally and does not provision cloud resources.",
+    );
+  }
+
+  async whoami(): Promise<Record<string, string | null | undefined>> {
+    return {
+      provider: "cloudflare",
+      accountId: this.accountId,
+      token: process.env.CLOUDFLARE_API_TOKEN ? "set" : "missing",
+    };
   }
 
   async connect(env: EnvironmentRecord): Promise<Record<string, string>> {

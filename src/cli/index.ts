@@ -8,6 +8,7 @@ import { enableServices } from './commands/enable.js';
 import { connectEnvironment } from './commands/connect.js';
 import { destroyEnvironment } from './commands/destroy.js';
 import { listProviders } from './commands/providers.js';
+import { doctor } from './commands/doctor.js';
 import { runCommand } from './output.js';
 
 const program = new Command();
@@ -23,10 +24,14 @@ program
   .description('Initialize a cloud provider')
   .argument('<provider>', 'Provider to initialize: aws | gcp | cloudflare | vercel')
   .option('-r, --region <region>', 'Default region')
+  .option('--billing-account <id>', 'GCP billing account ID')
   .option('--json', 'Output as JSON')
-  .action(async (provider: string, options: { region?: string; json?: boolean }) => {
+  .action(async (provider: string, options: { region?: string; billingAccount?: string; json?: boolean }) => {
     await runCommand(options.json, () =>
-      initProvider(provider, options.region, store, { json: options.json }),
+      initProvider(provider, options.region, store, {
+        json: options.json,
+        billingAccount: options.billingAccount,
+      }),
     );
   });
 
@@ -36,15 +41,31 @@ program
   .argument('<name>', 'Environment name (lowercase letters, digits, hyphens)')
   .option('-p, --provider <provider>', 'Cloud provider: aws | gcp | cloudflare | vercel')
   .option('-r, --region <region>', 'Region')
+  .option('--billing-account <id>', 'GCP billing account ID')
+  .option('--ttl <duration>', 'Auto-destroy after a duration such as 30m, 2h, or 1d')
+  .option('--strict', 'Exit non-zero when create finishes as failed/partial')
   .option('--dry-run', 'Preview actions without executing')
   .option('--json', 'Output as JSON')
-  .action(async (name: string, options: { provider?: string; region?: string; dryRun?: boolean; json?: boolean }) => {
+  .action(async (name: string, options: {
+    provider?: string;
+    region?: string;
+    billingAccount?: string;
+    ttl?: string;
+    strict?: boolean;
+    dryRun?: boolean;
+    json?: boolean;
+  }) => {
     await runCommand(options.json, () =>
       createEnvironment(
         name,
-        { provider: options.provider, region: options.region },
+        {
+          provider: options.provider,
+          region: options.region,
+          billingAccount: options.billingAccount,
+          ttl: options.ttl,
+        },
         store,
-        { dryRun: options.dryRun, json: options.json },
+        { dryRun: options.dryRun, json: options.json, strict: options.strict },
       ),
     );
   });
@@ -106,6 +127,16 @@ program
   .option('--json', 'Output as JSON')
   .action(async (options: { json?: boolean }) => {
     await runCommand(options.json, () => listProviders(options));
+  });
+
+program
+  .command('doctor')
+  .alias('whoami')
+  .description('Show auth, init, identity, lock, and expired environments')
+  .option('--reap', 'Destroy environments whose TTL has expired')
+  .option('--json', 'Output as JSON')
+  .action(async (options: { json?: boolean; reap?: boolean }) => {
+    await runCommand(options.json, () => doctor(store, options));
   });
 
 export { program, store };

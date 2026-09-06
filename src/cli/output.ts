@@ -14,6 +14,9 @@ export type ResultCode =
   | "PROVIDER_ERROR"
   | "STATE_CORRUPT"
   | "STATE_LOCKED"
+  | "PARTIAL"
+  | "EXPIRED"
+  | "INVALID_TTL"
   | "INTERNAL";
 
 export interface OkPayload extends Record<string, unknown> {

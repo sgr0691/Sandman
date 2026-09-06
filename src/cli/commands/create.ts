@@ -11,17 +11,24 @@ import {
   defaultCreateServices,
   formatHourlyRate,
 } from "../../utils/cost-estimator.js";
+import { TTL_HINT, expiresAtFromTtl } from "../../utils/ttl.js";
 import { emitErr, emitOk, mapThrownError } from "../output.js";
 import { ENV_NAME_HINT, isValidEnvName } from "../env-name.js";
 
 interface CreateParams {
   dryRun?: boolean;
   json?: boolean;
+  strict?: boolean;
 }
 
 export async function createEnvironment(
   name: string,
-  options: { provider?: string; region?: string },
+  options: {
+    provider?: string;
+    region?: string;
+    billingAccount?: string;
+    ttl?: string;
+  },
   store: StateStore,
   params: CreateParams,
 ): Promise<void> {
@@ -74,9 +81,26 @@ export async function createEnvironment(
     });
   }
 
+  let ttlInfo: { expiresAt: string; ttl: string } | undefined;
+  if (options.ttl) {
+    try {
+      ttlInfo = expiresAtFromTtl(options.ttl);
+    } catch (error: unknown) {
+      emitErr(params.json, {
+        code: "INVALID_TTL",
+        error: error instanceof Error ? error.message : String(error),
+        hint: TTL_HINT,
+      });
+    }
+  }
+
   const warning = experimentalWarning(providerType);
   const requestedRegion = options.region || providerConfig.region;
   const region = requestedRegion || "default";
+  const requestedBilling =
+    options.billingAccount ||
+    providerConfig.billingAccount ||
+    process.env.GCP_BILLING_ACCOUNT;
 
   if (params.dryRun) {
     const dryRunResult = {
@@ -84,6 +108,9 @@ export async function createEnvironment(
       name,
       provider: providerType,
       region,
+      ...(requestedBilling ? { billingAccount: requestedBilling } : {}),
+      ...(ttlInfo ? { ttl: ttlInfo.ttl, expiresAt: ttlInfo.expiresAt } : {}),
+      ...(params.strict ? { strict: true } : {}),
       ...(warning ? { warning } : {}),
     };
     emitOk(params.json, dryRunResult, () => {
@@ -91,6 +118,12 @@ export async function createEnvironment(
       console.log(chalk.gray(`  - Environment: ${name}`));
       console.log(chalk.gray(`  - Provider: ${providerType}`));
       console.log(chalk.gray(`  - Region: ${region}`));
+      if (requestedBilling) {
+        console.log(chalk.gray(`  - Billing: ${requestedBilling}`));
+      }
+      if (ttlInfo) {
+        console.log(chalk.gray(`  - TTL: ${ttlInfo.ttl} (expires ${ttlInfo.expiresAt})`));
+      }
       if (warning) {
         console.log(chalk.yellow(`  - Warning: ${warning}`));
       }
@@ -116,6 +149,9 @@ export async function createEnvironment(
           '" when finished to avoid ongoing charges\n',
       ),
     );
+    if (ttlInfo) {
+      console.log(chalk.gray(`TTL ${ttlInfo.ttl}; expires ${ttlInfo.expiresAt}`));
+    }
     if (warning) {
       console.log(chalk.yellow(`⚠ ${warning}\n`));
     }
@@ -126,10 +162,17 @@ export async function createEnvironment(
   try {
     const adapter = getAdapter(providerType);
     await adapter.init();
-    configureAdapter(adapter, { region: requestedRegion });
+    configureAdapter(adapter, {
+      region: requestedRegion,
+      billingAccount: requestedBilling,
+    });
     const env = await adapter.createEnvironment(name);
     if (requestedRegion && !env.region) {
       env.region = requestedRegion;
+    }
+    if (ttlInfo) {
+      env.ttl = ttlInfo.ttl;
+      env.expiresAt = ttlInfo.expiresAt;
     }
 
     await store.saveEnvironment(env);
@@ -138,19 +181,31 @@ export async function createEnvironment(
     if (warning) warnings.push(warning);
     if (env.status === "failed" && env.error) warnings.push(env.error);
     const partial = env.status === "failed";
+    const payload = {
+      environment: env,
+      ...(warning ? { warning } : {}),
+      ...(warnings.length ? { warnings } : {}),
+      ...(partial ? { partial: true } : {}),
+    };
 
-    emitOk(
-      params.json,
-      {
-        environment: env,
-        ...(warning ? { warning } : {}),
-        ...(warnings.length ? { warnings } : {}),
-        ...(partial ? { partial: true } : {}),
-      },
-      () => {
-        if (partial) {
-          spinner!.warn(
-            chalk.yellow(
+    if (partial && params.strict) {
+      emitErr(
+        params.json,
+        {
+          code: "PARTIAL",
+          error:
+            env.error ||
+            `Environment "${name}" was created with partial or unlinkable resources.`,
+          ...payload,
+          hint: "Pass without --strict to record the failure and continue. Destroy leftovers before recreating.",
+          next: [
+            `sandman destroy ${name} -y --json`,
+            `sandman status ${name} --json`,
+          ],
+        },
+        () => {
+          spinner?.fail?.(
+            chalk.red(
               `Environment "${name}" was saved as failed (partial resources).`,
             ),
           );
@@ -161,24 +216,59 @@ export async function createEnvironment(
             chalk.cyan(`\n→ Run "sandman status ${name}" to see what was created`),
           );
           console.log(
-            chalk.cyan(`→ Run "sandman destroy ${name}" to clean up partial resources`),
+            chalk.cyan(
+              `→ Run "sandman destroy ${name}" to clean up partial resources`,
+            ),
           );
-          return;
-        }
-        spinner!.succeed(
-          chalk.green(`Environment "${name}" created successfully!`),
-        );
-        if (warning) {
-          console.log(chalk.yellow(`⚠ ${warning}`));
-        }
-        console.log(chalk.cyan(`\n→ Run "sandman status ${name}" to see details`));
-        console.log(
-          chalk.cyan(
-            `→ Run "sandman enable <services> -e ${name}" to enable services`,
+        },
+      );
+    }
+
+    emitOk(params.json, payload, () => {
+      if (partial) {
+        spinner!.warn(
+          chalk.yellow(
+            `Environment "${name}" was saved as failed (partial resources).`,
           ),
         );
-      },
-    );
+        if (env.error) {
+          console.log(chalk.red(`Error: ${env.error}`));
+        }
+        console.log(
+          chalk.cyan(`\n→ Run "sandman status ${name}" to see what was created`),
+        );
+        console.log(
+          chalk.cyan(
+            `→ Run "sandman destroy ${name}" to clean up partial resources`,
+          ),
+        );
+        if (!params.strict) {
+          console.log(
+            chalk.gray('→ Agents: pass --strict to exit non-zero on failed creates'),
+          );
+        }
+        return;
+      }
+      spinner!.succeed(
+        chalk.green(`Environment "${name}" created successfully!`),
+      );
+      if (warning) {
+        console.log(chalk.yellow(`⚠ ${warning}`));
+      }
+      if (ttlInfo) {
+        console.log(
+          chalk.gray(
+            `Expires ${ttlInfo.expiresAt}. Status/connect/enable will reap it after TTL.`,
+          ),
+        );
+      }
+      console.log(chalk.cyan(`\n→ Run "sandman status ${name}" to see details`));
+      console.log(
+        chalk.cyan(
+          `→ Run "sandman enable <services> -e ${name}" to enable services`,
+        ),
+      );
+    });
   } catch (error: unknown) {
     spinner?.fail?.(chalk.red("Failed to create environment"));
     const mapped = mapThrownError(error);

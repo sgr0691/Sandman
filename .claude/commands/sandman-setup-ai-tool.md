@@ -73,7 +73,7 @@ Create only the files for the tools the user selected. Use the exact content bel
 
 ```bash
 mkdir -p .claude/commands
-curl -fsSL https://raw.githubusercontent.com/sgr0691/sandman/main/.claude/commands/cloud-infra.md \
+curl -fsSL https://raw.githubusercontent.com/BoringInfraCo/Sandman/main/.claude/commands/cloud-infra.md \
   -o .claude/commands/cloud-infra.md
 ```
 
@@ -90,7 +90,7 @@ cat .cursor/rules/sandman.mdc 2>/dev/null
 
 ```bash
 mkdir -p .cursor/rules
-curl -fsSL https://raw.githubusercontent.com/sgr0691/sandman/main/.cursor/rules/sandman.mdc \
+curl -fsSL https://raw.githubusercontent.com/BoringInfraCo/Sandman/main/.cursor/rules/sandman.mdc \
   -o .cursor/rules/sandman.mdc
 ```
 
@@ -107,7 +107,7 @@ cat .github/copilot-instructions.md 2>/dev/null
 
 ```bash
 mkdir -p .github
-curl -fsSL https://raw.githubusercontent.com/sgr0691/sandman/main/.github/copilot-instructions.md \
+curl -fsSL https://raw.githubusercontent.com/BoringInfraCo/Sandman/main/.github/copilot-instructions.md \
   -o .github/copilot-instructions.md
 ```
 
@@ -122,7 +122,7 @@ cat .windsurf/rules/sandman.md 2>/dev/null
 
 ```bash
 mkdir -p .windsurf/rules
-curl -fsSL https://raw.githubusercontent.com/sgr0691/sandman/main/.windsurf/rules/sandman.md \
+curl -fsSL https://raw.githubusercontent.com/BoringInfraCo/Sandman/main/.windsurf/rules/sandman.md \
   -o .windsurf/rules/sandman.md
 ```
 

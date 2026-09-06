@@ -31,14 +31,16 @@ alwaysApply: false
 npm install -g @itssergio91/sandman
 
 # Core workflow
-sandman init <provider> [--region <region>] [--json]
-sandman create <name> [-p <provider>] [-r <region>] [--dry-run] [--json]
+sandman init <provider> [--region <region>] [--billing-account <id>] [--json]
+sandman create <name> [-p <provider>] [-r <region>] [--billing-account <id>] [--ttl <duration>] [--strict] [--dry-run] [--json]
 sandman enable <service1> [service2...] [-e <env-name>] [--json]
 sandman list [--json]
 sandman status <name> [--json]
 sandman connect <name> [--json]
 sandman destroy <name> [-y] [--json]
 sandman providers [--json]
+sandman doctor [--reap] [--json]
+sandman whoami [--json]
 ```
 
 ## Workflow
@@ -48,10 +50,11 @@ When a user asks to set up cloud infrastructure:
 1. **Check if Sandman is installed**: `which sandman || npx @itssergio91/sandman --version`
 2. **List existing environments**: `sandman list --json` — a raw array of environments, not init state. Reuse *active* ones; a `destroyed` name can be recreated
 3. **Initialize the provider** if create would return `NO_PROVIDER`: `sandman init <provider> --json`
-4. **Create the environment**: `sandman create <name> --provider <provider> --json`
-5. **Inspect create JSON**: if `environment.status` is `failed` or `partial` is true, run `sandman destroy <name> -y --json` then recreate. Read `warnings[]`
-6. **Enable services**: `sandman enable <services...> -e <name> --json` — GCP enables APIs; AWS/Cloudflare/Vercel update the local registry only
+4. **Create the environment**: `sandman create <name> --provider <provider> --ttl 2h --strict --json`
+5. **Inspect create JSON**: if `environment.status` is `failed` or `partial` is true (or `code` is `PARTIAL` with `--strict`), run `sandman destroy <name> -y --json` then recreate. Read `warnings[]`. GCP needs billing (`--billing-account` or `GCP_BILLING_ACCOUNT`)
+6. **Enable services**: `sandman enable <services...> -e <name> --json` — GCP enables APIs; AWS `s3`/`ec2`/`iam` were created by `create`; `lambda` and Cloudflare/Vercel are `localOnly`
 7. **Get credentials**: `sandman connect <name> --json` — present as a copyable `.env` block
+8. **Diagnose auth**: `sandman doctor --json` when create/init returns `AUTH_REQUIRED`
 
 ## Example Flows
 
@@ -84,12 +87,13 @@ sandman connect gcp-demo --json
 
 ## Rules
 
-- Always use `--json` flag for machine-readable output. Failures include `code`, `error`, `hint`, and `next`. Extra create fields: `warnings[]`, `partial`.
+- Always use `--json` flag for machine-readable output. Failures include `code`, `error`, `hint`, and `next`. Extra create fields: `warnings[]`, `partial`. Agents should pass `--strict` on create.
 - Run `sandman providers --json` when the user asks for Cloudflare or Vercel: they are experimental (local registry only; create/enable do not provision CF/Vercel cloud resources).
-- After creating any environment, remind the user: **run `sandman destroy <name>` when done** to avoid cloud charges
+- After creating any environment, remind the user: **run `sandman destroy <name>` when done** to avoid cloud charges. Prefer `--ttl 2h` so expired sandboxes are reaped on status/connect/enable or `sandman doctor --reap`.
 - After a successful destroy, the name is recycled — recreate is allowed
 - Before destroying, confirm with the user, then run `sandman destroy <name> -y --json` (`--json` without `-y` does not prompt; it errors with `CONFIRMATION_REQUIRED`)
 - `sandman connect --json` redacts tokens. Do not pass `--show-secrets` unless the user asks.
-- If credentials are missing (`AUTH_REQUIRED`), tell the user exactly what env vars to set or CLI auth commands to run
+- If credentials are missing (`AUTH_REQUIRED`), run `sandman doctor --json` and tell the user exactly what env vars to set or CLI auth commands to run
 - `sandman list --json` is environments only. Do not treat it as init state; run `sandman init` when create returns `NO_PROVIDER`
+- GCP create without a billing account is saved as `failed`. Pass `--billing-account` or `GCP_BILLING_ACCOUNT`.
 - If Azure is requested, explain it's coming soon and suggest AWS or GCP

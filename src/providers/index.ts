@@ -2,8 +2,7 @@ import { AwsAdapter } from './aws/adapter.js';
 import { GcpAdapter } from './gcp/adapter.js';
 import { CloudflareAdapter } from './cloudflare/adapter.js';
 import { VercelAdapter } from './vercel/adapter.js';
-import { ProviderAdapter } from './base.js';
-import { ProviderType } from '../types/index.js';
+import { ProviderAdapter, ProviderType } from '../types/index.js';
 
 export function getAdapter(providerType: ProviderType): ProviderAdapter {
   switch (providerType) {
@@ -20,9 +19,15 @@ export function getAdapter(providerType: ProviderType): ProviderAdapter {
 
 export function configureAdapter(
   adapter: ProviderAdapter,
-  options: { region?: string },
+  options: { region?: string; billingAccount?: string },
 ): void {
   if (options.region && typeof adapter.setRegion === "function") {
     adapter.setRegion(options.region);
+  }
+  if (
+    options.billingAccount &&
+    typeof adapter.setBillingAccount === "function"
+  ) {
+    adapter.setBillingAccount(options.billingAccount);
   }
 }

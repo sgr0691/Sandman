@@ -7,6 +7,8 @@ import {
   formatHourlyRate,
 } from "../../utils/cost-estimator.js";
 import { emitErr, emitOk } from "../output.js";
+import { reapIfExpired } from "../reap.js";
+import { isExpired } from "../../utils/ttl.js";
 
 interface StatusOptions {
   json?: boolean;
@@ -24,6 +26,36 @@ export async function statusEnvironment(
       code: "NOT_FOUND",
       error: `Environment "${name}" not found.`,
       next: ["sandman list --json"],
+    });
+  }
+
+  const reap = await reapIfExpired(store, stored);
+  if (reap.reaped) {
+    emitOk(
+      options.json,
+      {
+        name,
+        status: "destroyed",
+        reaped: true,
+        reason: "ttl expired",
+        expiresAt: stored.expiresAt,
+      },
+      () => {
+        console.log(
+          chalk.yellow(
+            `\nEnvironment "${name}" exceeded its TTL and was destroyed.`,
+          ),
+        );
+        console.log(chalk.cyan(`→ Run "sandman create ${name}" to recreate it`));
+      },
+    );
+    return;
+  }
+  if (reap.error) {
+    emitErr(options.json, {
+      code: "PROVIDER_ERROR",
+      error: `Environment "${name}" is expired but destroy failed: ${reap.error}`,
+      next: [`sandman destroy ${name} -y --json`],
     });
   }
 
@@ -55,6 +87,7 @@ export async function statusEnvironment(
     {
       ...env,
       costEstimate,
+      ...(env.expiresAt ? { expired: isExpired(env) } : {}),
     },
     () => {
       console.log(chalk.bold(`\nEnvironment: ${env.name}\n`));
@@ -66,12 +99,20 @@ export async function statusEnvironment(
         `  ${chalk.gray("Created:")} ${new Date(env.createdAt).toLocaleString()}`,
       );
       console.log(`  ${chalk.gray("Age:")} ${hours}h ${minutes}m`);
+      if (env.expiresAt) {
+        console.log(
+          `  ${chalk.gray("Expires:")} ${new Date(env.expiresAt).toLocaleString()}${env.ttl ? ` (${env.ttl})` : ""}`,
+        );
+      }
 
       if (env.projectId) {
         console.log(`  ${chalk.gray("Project ID:")} ${env.projectId}`);
       }
       if (env.accountId) {
         console.log(`  ${chalk.gray("Account ID:")} ${env.accountId}`);
+      }
+      if (env.billingAccount) {
+        console.log(`  ${chalk.gray("Billing:")} ${env.billingAccount}`);
       }
       if (env.region) {
         console.log(`  ${chalk.gray("Region:")} ${env.region}`);

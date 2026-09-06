@@ -4,6 +4,7 @@ import { StateStore } from '../../core/state-store.js';
 import { getAdapter } from '../../providers/index.js';
 import { emitErr, emitOk, mapThrownError } from '../output.js';
 import { quoteEnvValue, redactSecrets } from '../secrets.js';
+import { reapIfExpired } from '../reap.js';
 
 interface ConnectOptions {
   json?: boolean;
@@ -27,6 +28,22 @@ export async function connectEnvironment(
 
   if (!options.json && env.status !== 'active') {
     console.log(chalk.yellow(`Environment "${name}" is not active (status: ${env.status}).`));
+  }
+
+  const reap = await reapIfExpired(store, env);
+  if (reap.reaped) {
+    emitErr(options.json, {
+      code: 'EXPIRED',
+      error: `Environment "${name}" exceeded its TTL and was destroyed.`,
+      next: [`sandman create ${name} --provider ${env.provider} --json`],
+    });
+  }
+  if (reap.error) {
+    emitErr(options.json, {
+      code: 'PROVIDER_ERROR',
+      error: `Environment "${name}" is expired but destroy failed: ${reap.error}`,
+      next: [`sandman destroy ${name} -y --json`],
+    });
   }
 
   const spinner = options.json ? null : ora(`Connecting to ${name}...`).start();
