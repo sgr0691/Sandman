@@ -42,6 +42,7 @@ node dist/index.js create test-env --dry-run
 ```bash
 node dist/index.js list
 node dist/index.js list --json
+node dist/index.js providers --json
 ```
 
 **Expected output:**
@@ -95,13 +96,15 @@ node dist/index.js enable compute storage -e demo-gcp
 ### Step 7: Connect to Environment
 
 ```bash
-node dist/index.js status demo-aws
+node dist/index.js connect demo-aws
+node dist/index.js connect demo-aws --json
 ```
 
 **Expected output:**
 
-- Environment variables to export
+- Environment variables to export (quoted)
 - gcloud/aws CLI commands
+- JSON envelope with `credentials` (secrets redacted unless `--show-secrets`)
 
 ### Step 8: Destroy Environment
 
@@ -111,6 +114,7 @@ node dist/index.js destroy demo-aws
 
 # Skip confirmation
 node dist/index.js destroy demo-aws -y
+node dist/index.js destroy demo-aws -y --json
 ```
 
 **Expected output:**

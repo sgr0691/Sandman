@@ -1,8 +1,19 @@
 import { ProviderAdapter, VERCEL_SERVICES } from "../base.js";
-import { EnvironmentRecord, ServiceName } from "../../types/index.js";
+import {
+  EnableResult,
+  EnvironmentRecord,
+  ServiceName,
+} from "../../types/index.js";
+import { localOnlyEnable } from "../enable-result.js";
+import { logger } from "../../utils/logger.js";
 
 export class VercelAdapter implements ProviderAdapter {
   private teamId: string | null = null;
+  private region: string | undefined;
+
+  setRegion(region: string): void {
+    this.region = region;
+  }
 
   async init(): Promise<void> {
     const token = process.env.VERCEL_TOKEN;
@@ -43,6 +54,7 @@ export class VercelAdapter implements ProviderAdapter {
       name,
       provider: "vercel",
       projectId: projectName,
+      region: this.region,
       status: "active",
       services: [],
       resources: {
@@ -56,11 +68,24 @@ export class VercelAdapter implements ProviderAdapter {
   async enableServices(
     env: EnvironmentRecord,
     services: ServiceName[],
-  ): Promise<void> {
+  ): Promise<EnableResult> {
     const enabledServices = services
       .map((s) => VERCEL_SERVICES[s])
       .filter(Boolean);
-    console.log(`Enabling Vercel services: ${enabledServices.join(", ")}`);
+    logger.info(`Enabling Vercel services: ${enabledServices.join(", ")}`);
+    return localOnlyEnable(
+      "vercel",
+      services.filter((s) => VERCEL_SERVICES[s]),
+      "vercel is experimental: enable records services locally and does not provision cloud resources.",
+    );
+  }
+
+  async whoami(): Promise<Record<string, string | null | undefined>> {
+    return {
+      provider: "vercel",
+      teamId: this.teamId,
+      token: process.env.VERCEL_TOKEN ? "set" : "missing",
+    };
   }
 
   async connect(env: EnvironmentRecord): Promise<Record<string, string>> {
@@ -68,9 +93,6 @@ export class VercelAdapter implements ProviderAdapter {
       provider: "vercel",
     };
 
-    if (process.env.VERCEL_TOKEN) {
-      result.VERCEL_TOKEN = process.env.VERCEL_TOKEN;
-    }
     if (env.projectId) {
       result.VERCEL_PROJECT_NAME = env.projectId;
     }
@@ -82,7 +104,7 @@ export class VercelAdapter implements ProviderAdapter {
   }
 
   async destroyEnvironment(env: EnvironmentRecord): Promise<void> {
-    console.log(`Cleaning up Vercel resources for environment: ${env.name}`);
+    logger.info(`Cleaning up Vercel resources for environment: ${env.name}`);
     // Future: delete Vercel project via API
     // DELETE /v9/projects/{projectId}
   }

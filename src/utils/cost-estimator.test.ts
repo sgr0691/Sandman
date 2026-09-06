@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   calculateEstimate,
   calculateRunningCost,
+  defaultCreateServices,
   formatCost,
   formatHourlyRate,
   SERVICE_COSTS,
@@ -49,6 +50,26 @@ describe("Cost Estimator", () => {
 
       const iamService = estimate.services.find((s) => s.name === "iam");
       expect(iamService?.hourlyRate).toBe(0);
+    });
+
+    it("should include Cloudflare and Vercel as zero-cost rows", () => {
+      const cf = calculateEstimate("cloudflare", ["workers", "kv"]);
+      expect(cf.hourlyRate).toBe(0);
+      expect(cf.services.map((s) => s.name)).toEqual(["workers", "kv"]);
+
+      const vercel = calculateEstimate("vercel", ["functions"]);
+      expect(vercel.hourlyRate).toBe(0);
+      expect(vercel.services).toHaveLength(1);
+    });
+
+    it("should estimate AWS create defaults as S3 + EC2 plus base", () => {
+      const services = defaultCreateServices("aws");
+      expect(services).toEqual(["s3", "ec2"]);
+      const estimate = calculateEstimate("aws", services);
+      expect(estimate.hourlyRate).toBe(
+        BASE_COSTS.aws + SERVICE_COSTS.aws.s3 + SERVICE_COSTS.aws.ec2,
+      );
+      expect(estimate.services.map((s) => s.name)).toEqual(["base", "s3", "ec2"]);
     });
   });
 

@@ -17,13 +17,37 @@ export const SERVICE_COSTS: Record<string, Record<ServiceName, number>> = {
     container: 0.0076, // GKE e2-micro
     artifactregistry: 0.005, // per GB stored
   } as Record<ServiceName, number>,
+  cloudflare: {
+    workers: 0,
+    pages: 0,
+    r2: 0,
+    kv: 0,
+    d1: 0,
+    "durable-objects": 0,
+  } as Record<ServiceName, number>,
+  vercel: {
+    functions: 0,
+    edge: 0,
+    blob: 0,
+    postgres: 0,
+  } as Record<ServiceName, number>,
 };
 
 // Base costs per provider per hour
 export const BASE_COSTS: Record<string, number> = {
   aws: 0.005, // VPC and basic infrastructure
   gcp: 0.0, // GCP doesn't charge for project itself
+  cloudflare: 0,
+  vercel: 0,
 };
+
+/** Services create actually attempts (AWS provisions S3 + VPC/EC2 up front). */
+export function defaultCreateServices(provider: string): ServiceName[] {
+  if (provider === "aws") {
+    return ["s3", "ec2"];
+  }
+  return [];
+}
 
 export interface CostEstimate {
   hourlyRate: number;

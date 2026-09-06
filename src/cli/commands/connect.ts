@@ -1,11 +1,14 @@
 import chalk from 'chalk';
 import ora from 'ora';
 import { StateStore } from '../../core/state-store.js';
-import { ProviderType } from '../../types/index.js';
 import { getAdapter } from '../../providers/index.js';
+import { emitErr, emitOk, mapThrownError } from '../output.js';
+import { quoteEnvValue, redactSecrets } from '../secrets.js';
+import { reapIfExpired } from '../reap.js';
 
 interface ConnectOptions {
   json?: boolean;
+  showSecrets?: boolean;
 }
 
 export async function connectEnvironment(
@@ -16,69 +19,97 @@ export async function connectEnvironment(
   const env = await store.getEnvironment(name);
 
   if (!env) {
-    if (options.json) {
-      console.log(JSON.stringify({ success: false, error: `Environment "${name}" not found.` }));
-      process.exit(1);
-    }
-    console.log(chalk.red(`Environment "${name}" not found.`));
-    process.exit(1);
+    emitErr(options.json, {
+      code: 'NOT_FOUND',
+      error: `Environment "${name}" not found.`,
+      next: ['sandman list --json'],
+    });
   }
 
   if (!options.json && env.status !== 'active') {
     console.log(chalk.yellow(`Environment "${name}" is not active (status: ${env.status}).`));
   }
 
+  const reap = await reapIfExpired(store, env);
+  if (reap.reaped) {
+    emitErr(options.json, {
+      code: 'EXPIRED',
+      error: `Environment "${name}" exceeded its TTL and was destroyed.`,
+      next: [`sandman create ${name} --provider ${env.provider} --json`],
+    });
+  }
+  if (reap.error) {
+    emitErr(options.json, {
+      code: 'PROVIDER_ERROR',
+      error: `Environment "${name}" is expired but destroy failed: ${reap.error}`,
+      next: [`sandman destroy ${name} -y --json`],
+    });
+  }
+
   const spinner = options.json ? null : ora(`Connecting to ${name}...`).start();
 
   try {
-    const adapter = getAdapter(env.provider as ProviderType);
-    const credentials = await adapter.connect(env);
+    const adapter = getAdapter(env.provider);
+    const rawCredentials = await adapter.connect(env);
+    const { values: credentials, secretsRedacted } = redactSecrets(
+      rawCredentials,
+      options.showSecrets ?? false,
+    );
 
     spinner?.stop();
 
-    if (options.json) {
-      console.log(JSON.stringify({ success: true, credentials }));
-      return;
-    }
+    emitOk(
+      options.json,
+      { credentials, secretsRedacted },
+      () => {
+        console.log(chalk.bold(`\nConnecting to environment: ${name}\n`));
 
-    console.log(chalk.bold(`\nConnecting to environment: ${name}\n`));
+        if (env.provider === 'gcp') {
+          console.log(chalk.gray('# GCP Configuration'));
+          if (credentials.GCP_PROJECT) {
+            console.log(`export GCP_PROJECT=${quoteEnvValue(credentials.GCP_PROJECT)}`);
+          }
+          console.log(chalk.gray('\n# Use with gcloud:'));
+          console.log(chalk.cyan(`gcloud config set project ${credentials.GCP_PROJECT || '<project-id>'}`));
+          console.log(chalk.cyan('gcloud auth application-default login'));
+        } else if (env.provider === 'aws') {
+          console.log(chalk.gray('# AWS Configuration'));
+          if (credentials.AWS_ACCOUNT_ID) {
+            console.log(`export AWS_ACCOUNT_ID=${quoteEnvValue(credentials.AWS_ACCOUNT_ID)}`);
+          }
+          if (credentials.AWS_REGION) {
+            console.log(`export AWS_REGION=${quoteEnvValue(credentials.AWS_REGION)}`);
+          }
+          console.log(chalk.gray('\n# Use with AWS CLI:'));
+          console.log(chalk.cyan('aws configure'));
+        } else if (env.provider === 'cloudflare') {
+          console.log(chalk.gray('# Cloudflare Configuration'));
+          console.log(chalk.cyan('export CLOUDFLARE_API_TOKEN=<set in environment>'));
+        } else if (env.provider === 'vercel') {
+          console.log(chalk.gray('# Vercel Configuration'));
+          console.log(chalk.cyan('export VERCEL_TOKEN=<set in environment>'));
+        }
 
-    if (env.provider === 'gcp') {
-      console.log(chalk.gray('# GCP Configuration'));
-      if (credentials.GCP_PROJECT) {
-        console.log(`export GCP_PROJECT=${credentials.GCP_PROJECT}`);
-      }
-      console.log(chalk.gray('\n# Use with gcloud:'));
-      console.log(chalk.cyan(`gcloud config set project ${credentials.GCP_PROJECT || '<project-id>'}`));
-      console.log(chalk.cyan('gcloud auth application-default login'));
-    } else if (env.provider === 'aws') {
-      console.log(chalk.gray('# AWS Configuration'));
-      if (credentials.AWS_ACCOUNT_ID) {
-        console.log(`export AWS_ACCOUNT_ID=${credentials.AWS_ACCOUNT_ID}`);
-      }
-      if (credentials.AWS_REGION) {
-        console.log(`export AWS_REGION=${credentials.AWS_REGION}`);
-      }
-      console.log(chalk.gray('\n# Use with AWS CLI:'));
-      console.log(chalk.cyan('aws configure'));
-    }
+        console.log(chalk.gray('\n# Copy to .env:'));
+        console.log(chalk.cyan(`SANDMAN_ENV=${quoteEnvValue(name)}`));
+        for (const [key, value] of Object.entries(credentials)) {
+          if (key !== 'provider') {
+            console.log(chalk.cyan(`${key}=${quoteEnvValue(value)}`));
+          }
+        }
 
-    console.log(chalk.gray('\n# Copy to .env:'));
-    console.log(chalk.cyan('SANDMAN_ENV=' + name));
-    for (const [key, value] of Object.entries(credentials)) {
-      if (key !== 'provider') {
-        console.log(chalk.cyan(`${key}=${value}`));
-      }
-    }
+        if (secretsRedacted) {
+          console.log(chalk.gray('\nSecrets redacted. Pass --show-secrets to print token values.'));
+        }
 
-    console.log(chalk.green('\n✓ Environment configured'));
-  } catch (error: any) {
-    if (options.json) {
-      console.log(JSON.stringify({ success: false, error: error.message }));
-      process.exit(1);
-    }
+        console.log(chalk.green('\n✓ Environment configured'));
+      },
+    );
+  } catch (error: unknown) {
     spinner?.fail?.(chalk.red('Failed to connect'));
-    console.log(chalk.red(`Error: ${error.message}`));
-    process.exit(1);
+    const mapped = mapThrownError(error);
+    emitErr(options.json, mapped, () => {
+      console.log(chalk.red(`Error: ${mapped.error}`));
+    });
   }
 }

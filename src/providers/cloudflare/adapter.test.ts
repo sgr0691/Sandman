@@ -106,7 +106,7 @@ describe("CloudflareAdapter", () => {
         updatedAt: new Date().toISOString(),
       };
 
-      const consoleSpy = vi.spyOn(console, "log");
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       await adapter.enableServices(env, ["workers", "kv", "d1"]);
 
       expect(consoleSpy).toHaveBeenCalledWith(
@@ -126,7 +126,7 @@ describe("CloudflareAdapter", () => {
         updatedAt: new Date().toISOString(),
       };
 
-      const consoleSpy = vi.spyOn(console, "log");
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       await adapter.enableServices(env, ["invalid-service" as ServiceName]);
 
       expect(consoleSpy).toHaveBeenCalledWith("Enabling Cloudflare services: ");
@@ -154,7 +154,7 @@ describe("CloudflareAdapter", () => {
 
       expect(creds.provider).toBe("cloudflare");
       expect(creds.CLOUDFLARE_ACCOUNT_ID).toBe("my-account");
-      expect(creds.CLOUDFLARE_API_TOKEN).toBe("my-token");
+      expect(creds.CLOUDFLARE_API_TOKEN).toBeUndefined();
       expect(creds.CLOUDFLARE_NAMESPACE_ID).toBe("ns-123");
     });
 
@@ -188,7 +188,7 @@ describe("CloudflareAdapter", () => {
         updatedAt: new Date().toISOString(),
       };
 
-      const consoleSpy = vi.spyOn(console, "log");
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       await adapter.destroyEnvironment(env);
 
       expect(consoleSpy).toHaveBeenCalledWith(

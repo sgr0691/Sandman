@@ -1,16 +1,4 @@
-import { EnvironmentRecord, ServiceName } from "../types/index.js";
-
-export interface ProviderAdapter {
-  init(): Promise<void>;
-  createEnvironment(name: string): Promise<EnvironmentRecord>;
-  enableServices(
-    env: EnvironmentRecord,
-    services: ServiceName[],
-  ): Promise<void>;
-  connect(env: EnvironmentRecord): Promise<Record<string, string>>;
-  destroyEnvironment(env: EnvironmentRecord): Promise<void>;
-  getStatus(env: EnvironmentRecord): Promise<EnvironmentRecord>;
-}
+export type { ProviderAdapter, EnableResult } from "../types/index.js";
 
 export const GCP_SERVICES: Record<string, string> = {
   compute: "compute.googleapis.com",

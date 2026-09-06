@@ -57,18 +57,20 @@ Sandman reduces that to **seconds**.
 • Billing configuration helpers  
 • Enable common cloud services  
 • Credential management  
-• Environment teardown
+• Environment teardown  
+• Machine-readable `--json` output for humans and agents  
 
 Supported providers:
 
-- AWS
-- GCP
+- AWS (supported)
+- GCP (supported)
 
-Future support:
+Experimental (auth + local registry only):
 
 - Cloudflare
-- DigitalOcean
-- Render
+- Vercel
+
+Run `sandman providers` to see the live capability matrix.
 
 ---
 
@@ -108,9 +110,10 @@ Enable services.
 sandman enable compute storage cloudrun
 ```
 
-Connect to the environment.
+Check status and connect.
 
 ```bash
+sandman status demo
 sandman connect demo
 ```
 
@@ -145,11 +148,23 @@ sandman destroy demo-env
 
 ## Commands
 
+All commands accept `--json` for machine-readable output. JSON errors use `{ success: false, code, error, hint?, next? }`.
+
+### List providers
+
+```bash
+sandman providers
+sandman providers --json
+```
+
+Shows which providers are fully supported vs experimental.
+
 ### Initialize provider
 
 ```bash
-sandman init aws
 sandman init gcp
+sandman init gcp --billing-account XXXXXX-XXXXXX-XXXXXX --json
+sandman init aws --region us-west-2 --json
 ```
 
 Authenticates and configures credentials.
@@ -160,13 +175,18 @@ Authenticates and configures credentials.
 
 ```bash
 sandman create <environment-name>
+sandman create demo --provider aws --dry-run
+sandman create demo -p gcp -r us-central1 --billing-account XXXXXX-XXXXXX-XXXXXX --json
+sandman create demo --provider aws --ttl 2h --strict --json
 ```
 
-Example:
+Names must be lowercase letters, digits, and hyphens (max 31 characters).
 
-```bash
-sandman create demo
-```
+AWS create persists whatever IDs were provisioned. If some steps fail, JSON includes `partial: true` and `warnings`; `environment.status` is `failed`. Destroy those leftovers, then recreate. Agents should pass `--strict` so a failed create exits non-zero (`code: PARTIAL`).
+
+`--ttl 30m|2h|1d` stores `expiresAt`. Status, connect, and enable destroy the environment when the TTL elapses (`sandman doctor --reap` reaps all expired).
+
+The `-r` / stored default region is passed to the provider (AWS honors it). GCP create links billing from `--billing-account`, `GCP_BILLING_ACCOUNT`, or the parent project; without billing the project is saved as `failed`.
 
 ---
 
@@ -175,14 +195,16 @@ sandman create demo
 AWS example:
 
 ```bash
-sandman enable ec2 s3 lambda
+sandman enable ec2 s3 lambda -e demo
 ```
 
 GCP example:
 
 ```bash
-sandman enable compute storage cloudrun
+sandman enable compute storage cloudrun -e demo
 ```
+
+`enable` returns `mode`, `provisioned`, and `localOnly`. GCP enable hits Service Usage APIs. AWS records `s3`/`ec2`/`iam` as already created by `create`; `lambda` is local-only. Cloudflare and Vercel enable is local-only.
 
 ---
 
@@ -190,27 +212,54 @@ sandman enable compute storage cloudrun
 
 ```bash
 sandman list
+sandman list --json
 ```
+
+`--json` is a raw array of environments (not wrapped, not init state). `sandman init` is separate.
+
+---
+
+### Environment status
+
+```bash
+sandman status demo
+sandman status demo --json
+```
+
+Shows provider, status, age, resources, and estimated cost. Status refreshes from the cloud (GCP project lifecycle; AWS instance/bucket) and saves if it changed. Expired TTL environments are destroyed.
+
+### Doctor / whoami
+
+```bash
+sandman doctor
+sandman doctor --json
+sandman whoami --json
+sandman doctor --reap --json
+```
+
+Prints init state, region, billing, caller identity, lock file, auth presence, and expired environments. `--reap` destroys expired sandboxes.
 
 ---
 
 ### Connect environment
 
 ```bash
-sandman connect <environment-name>
+sandman connect demo
+sandman connect demo --json
 ```
 
-Outputs environment credentials.
+Outputs environment variables. Secret values (API tokens) are redacted by default. Pass `--show-secrets` only when you intentionally need the raw token.
 
 ---
 
 ### Destroy environment
 
 ```bash
-sandman destroy <environment-name>
+sandman destroy demo
+sandman destroy demo -y --json
 ```
 
-Deletes all associated resources.
+Deletes associated cloud resources, then removes the local record so the name can be reused. `--json` never prompts; pass `-y` to confirm.
 
 ---
 
@@ -240,10 +289,8 @@ Uses AWS SDK to provision:
 
 - VPC
 - EC2
-- S3
-- IAM roles
-
----
+- S3 (public access blocked, SSE-S3 encryption)
+- IAM roles (SSM, no public SSH)
 
 ### GCP
 
@@ -251,9 +298,9 @@ Uses Google Cloud APIs to provision:
 
 - projects
 - billing connections
-- cloud run
-- storage buckets
-- service accounts
+- API enablement
+- service accounts (planned)
+- storage buckets (planned)
 
 ---
 
@@ -280,12 +327,9 @@ sandman/
 
 src/
   cli/
+  core/
   providers/
-  templates/
   utils/
-
-docs/
-  PRD.md
 
 package.json
 ```
@@ -297,7 +341,7 @@ package.json
 Planned features:
 
 • Environment templates  
-• Multi-cloud provisioning  
+• Multi-cloud provisioning (Cloudflare / Vercel beyond experimental)  
 • GitHub demo environments  
 • Local testing environments
 
@@ -310,9 +354,10 @@ Pull requests are welcome.
 To contribute:
 
 ```bash
-git clone https://github.com/your-org/sandman
-cd sandman
+git clone https://github.com/BoringInfraCo/Sandman.git
+cd Sandman
 npm install
+npm test
 npm run dev
 ```
 
