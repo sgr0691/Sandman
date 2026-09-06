@@ -38,6 +38,7 @@ sandman list [--json]
 sandman status <name> [--json]
 sandman connect <name> [--json]
 sandman destroy <name> [-y] [--json]
+sandman providers [--json]
 ```
 
 ## Workflow
@@ -82,9 +83,11 @@ sandman connect gcp-demo --json
 
 ## Rules
 
-- Always use `--json` flag for machine-readable output
+- Always use `--json` flag for machine-readable output. Failures include `code`, `error`, `hint`, and `next`.
+- Run `sandman providers --json` when the user asks for Cloudflare or Vercel: they are experimental (local registry only).
 - After creating any environment, remind the user: **run `sandman destroy <name>` when done** to avoid cloud charges
-- Before destroying an environment, ask the user to confirm (unless they said "yes" or "skip confirmation")
+- Before destroying, confirm with the user, then run `sandman destroy <name> -y --json` (`--json` without `-y` does not prompt; it errors with `CONFIRMATION_REQUIRED`)
+- `sandman connect --json` redacts tokens. Do not pass `--show-secrets` unless the user asks.
 - If credentials are missing, tell the user exactly what env vars to set or CLI auth commands to run
 - Do not re-initialize a provider if it's already in `sandman list --json`
-- If Azure is requested, explain it's coming soon and suggest an alternative
+- If Azure is requested, explain it's coming soon and suggest AWS or GCP

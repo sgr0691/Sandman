@@ -41,6 +41,21 @@ describe('StateStore', () => {
       expect(config.environments['test-env']).toBeDefined();
       expect(config.environments['test-env'].name).toBe('test-env');
     });
+
+    it('should throw on corrupt JSON instead of wiping state', async () => {
+      const fs = await import('fs/promises');
+      await fs.writeFile(testConfigPath, '{ not json');
+      await expect(store.load()).rejects.toThrow(/corrupt/);
+    });
+
+    it('should throw on schema-invalid config instead of wiping state', async () => {
+      const fs = await import('fs/promises');
+      await fs.writeFile(
+        testConfigPath,
+        JSON.stringify({ version: '1.0.0', environments: { bad: { name: 1 } } }),
+      );
+      await expect(store.load()).rejects.toThrow(/invalid/);
+    });
   });
 
   describe('save', () => {
@@ -53,6 +68,13 @@ describe('StateStore', () => {
       const fs = await import('fs/promises');
       const content = await fs.readFile(testConfigPath, 'utf-8');
       expect(JSON.parse(content)).toEqual(config);
+    });
+
+    it('should write the state file with owner-only permissions', async () => {
+      await store.save({ version: '1.0.0', environments: {} });
+      const fs = await import('fs/promises');
+      const stat = await fs.stat(testConfigPath);
+      expect(stat.mode & 0o777).toBe(0o600);
     });
   });
 

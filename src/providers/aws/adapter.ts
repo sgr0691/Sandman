@@ -1,5 +1,6 @@
-import { ProviderAdapter, AWS_SERVICES } from "../base.js";
+import { ProviderAdapter } from "../base.js";
 import { EnvironmentRecord, ServiceName } from "../../types/index.js";
+import { logger } from "../../utils/logger.js";
 
 export class AwsAdapter implements ProviderAdapter {
   private accountId: string | null = null;
@@ -41,10 +42,40 @@ export class AwsAdapter implements ProviderAdapter {
           Bucket: bucketName,
         }),
       );
+
+      const { PutPublicAccessBlockCommand, PutBucketEncryptionCommand } =
+        await import("@aws-sdk/client-s3");
+      await s3Client.send(
+        new PutPublicAccessBlockCommand({
+          Bucket: bucketName,
+          PublicAccessBlockConfiguration: {
+            BlockPublicAcls: true,
+            IgnorePublicAcls: true,
+            BlockPublicPolicy: true,
+            RestrictPublicBuckets: true,
+          },
+        }),
+      );
+      await s3Client.send(
+        new PutBucketEncryptionCommand({
+          Bucket: bucketName,
+          ServerSideEncryptionConfiguration: {
+            Rules: [
+              {
+                ApplyServerSideEncryptionByDefault: {
+                  SSEAlgorithm: "AES256",
+                },
+                BucketKeyEnabled: true,
+              },
+            ],
+          },
+        }),
+      );
+
       resources.bucketName = bucketName;
     } catch (error: any) {
       if (error.name !== "BucketAlreadyOwnedByYou") {
-        console.warn("Could not create bucket:", error.message);
+        logger.warn(`Could not create bucket: ${error.message}`);
       }
     }
 
@@ -53,7 +84,7 @@ export class AwsAdapter implements ProviderAdapter {
       const vpcResources = await this.createVpcResources(name);
       Object.assign(resources, vpcResources);
     } catch (error: any) {
-      console.warn("Could not create VPC:", error.message);
+      logger.warn(`Could not create VPC: ${error.message}`);
     }
 
     // Create IAM role
@@ -61,7 +92,7 @@ export class AwsAdapter implements ProviderAdapter {
       const iamResources = await this.createIamResources(name);
       Object.assign(resources, iamResources);
     } catch (error: any) {
-      console.warn("Could not create IAM role:", error.message);
+      logger.warn(`Could not create IAM role: ${error.message}`);
     }
 
     // Create EC2 instance
@@ -76,7 +107,7 @@ export class AwsAdapter implements ProviderAdapter {
         resources.instanceId = instanceId;
       }
     } catch (error: any) {
-      console.warn("Could not create EC2 instance:", error.message);
+      logger.warn(`Could not create EC2 instance: ${error.message}`);
     }
 
     const now = new Date().toISOString();
@@ -225,17 +256,12 @@ export class AwsAdapter implements ProviderAdapter {
     );
     resources.securityGroupId = sgResponse.GroupId || "";
 
-    // Allow SSH and HTTP/HTTPS
+    // HTTP/HTTPS for demos. SSH is not opened to the internet; use SSM
+    // (AmazonSSMManagedInstanceCore is attached to the instance role).
     await ec2Client.send(
       new AuthorizeSecurityGroupIngressCommand({
         GroupId: resources.securityGroupId,
         IpPermissions: [
-          {
-            IpProtocol: "tcp",
-            FromPort: 22,
-            ToPort: 22,
-            IpRanges: [{ CidrIp: "0.0.0.0/0", Description: "SSH" }],
-          },
           {
             IpProtocol: "tcp",
             FromPort: 80,
@@ -366,7 +392,7 @@ export class AwsAdapter implements ProviderAdapter {
     env: EnvironmentRecord,
     services: ServiceName[],
   ): Promise<void> {
-    console.log(`Enabling AWS services: ${services.join(", ")}`);
+    logger.info(`Enabling AWS services: ${services.join(", ")}`);
   }
 
   async connect(env: EnvironmentRecord): Promise<Record<string, string>> {
@@ -399,24 +425,31 @@ export class AwsAdapter implements ProviderAdapter {
   async destroyEnvironment(env: EnvironmentRecord): Promise<void> {
     const { EC2Client } = await import("@aws-sdk/client-ec2");
     const ec2Client = new EC2Client({ region: env.region });
+    const failures: string[] = [];
 
     // Terminate EC2 instance
     if (env.resources.instanceId) {
       try {
-        const { TerminateInstancesCommand } =
+        const { TerminateInstancesCommand, waitUntilInstanceTerminated } =
           await import("@aws-sdk/client-ec2");
         await ec2Client.send(
           new TerminateInstancesCommand({
             InstanceIds: [env.resources.instanceId as string],
           }),
         );
-        console.log(`Terminated EC2 instance: ${env.resources.instanceId}`);
+        if (typeof waitUntilInstanceTerminated === "function") {
+          await waitUntilInstanceTerminated(
+            { client: ec2Client, maxWaitTime: 60 },
+            { InstanceIds: [env.resources.instanceId as string] },
+          );
+        }
+        logger.info(`Terminated EC2 instance: ${env.resources.instanceId}`);
       } catch (error: any) {
-        console.warn("Could not terminate instance:", error.message);
+        failures.push(`instance: ${error.message}`);
       }
     }
 
-    // Delete S3 bucket
+    // Delete S3 bucket (paginate so leftover objects cannot block delete)
     if (env.resources.bucketName) {
       try {
         const {
@@ -426,35 +459,44 @@ export class AwsAdapter implements ProviderAdapter {
           DeleteObjectsCommand,
         } = await import("@aws-sdk/client-s3");
         const s3Client = new S3Client({ region: env.region });
+        const bucket = env.resources.bucketName as string;
 
-        const listResponse = await s3Client.send(
-          new ListObjectsV2Command({
-            Bucket: env.resources.bucketName as string,
-          }),
-        );
-
-        if (listResponse.Contents?.length) {
-          await s3Client.send(
-            new DeleteObjectsCommand({
-              Bucket: env.resources.bucketName as string,
-              Delete: {
-                Objects: listResponse.Contents.map((obj) => ({
-                  Key: obj.Key!,
-                })),
-              },
+        let token: string | undefined;
+        do {
+          const listResponse = await s3Client.send(
+            new ListObjectsV2Command({
+              Bucket: bucket,
+              ContinuationToken: token,
             }),
           );
-        }
+
+          if (listResponse.Contents?.length) {
+            await s3Client.send(
+              new DeleteObjectsCommand({
+                Bucket: bucket,
+                Delete: {
+                  Objects: listResponse.Contents.map((obj) => ({
+                    Key: obj.Key!,
+                  })),
+                },
+              }),
+            );
+          }
+
+          token = listResponse.IsTruncated
+            ? listResponse.NextContinuationToken
+            : undefined;
+        } while (token);
 
         await s3Client.send(
           new DeleteBucketCommand({
-            Bucket: env.resources.bucketName as string,
+            Bucket: bucket,
           }),
         );
-        console.log(`Deleted S3 bucket: ${env.resources.bucketName}`);
+        logger.info(`Deleted S3 bucket: ${bucket}`);
       } catch (error: any) {
         if (error.name !== "NoSuchBucket") {
-          console.warn("Could not delete bucket:", error.message);
+          failures.push(`bucket: ${error.message}`);
         }
       }
     }
@@ -474,7 +516,6 @@ export class AwsAdapter implements ProviderAdapter {
         const roleName = `sandman-${env.name}-role`;
         const instanceProfileName = env.resources.iamInstanceProfile as string;
 
-        // Remove role from instance profile
         await iamClient.send(
           new RemoveRoleFromInstanceProfileCommand({
             InstanceProfileName: instanceProfileName,
@@ -482,14 +523,12 @@ export class AwsAdapter implements ProviderAdapter {
           }),
         );
 
-        // Delete instance profile
         await iamClient.send(
           new DeleteInstanceProfileCommand({
             InstanceProfileName: instanceProfileName,
           }),
         );
 
-        // Detach policy from role
         await iamClient.send(
           new DetachRolePolicyCommand({
             RoleName: roleName,
@@ -497,15 +536,14 @@ export class AwsAdapter implements ProviderAdapter {
           }),
         );
 
-        // Delete role
         await iamClient.send(
           new DeleteRoleCommand({
             RoleName: roleName,
           }),
         );
-        console.log(`Deleted IAM role and instance profile for: ${env.name}`);
+        logger.info(`Deleted IAM role and instance profile for: ${env.name}`);
       } catch (error: any) {
-        console.warn("Could not delete IAM resources:", error.message);
+        failures.push(`iam: ${error.message}`);
       }
     }
 
@@ -521,7 +559,6 @@ export class AwsAdapter implements ProviderAdapter {
           DeleteVpcCommand,
         } = await import("@aws-sdk/client-ec2");
 
-        // Delete security group
         if (env.resources.securityGroupId) {
           await ec2Client.send(
             new DeleteSecurityGroupCommand({
@@ -530,7 +567,6 @@ export class AwsAdapter implements ProviderAdapter {
           );
         }
 
-        // Delete route table
         if (env.resources.routeTableId) {
           await ec2Client.send(
             new DeleteRouteTableCommand({
@@ -539,7 +575,6 @@ export class AwsAdapter implements ProviderAdapter {
           );
         }
 
-        // Delete subnet
         if (env.resources.subnetId) {
           await ec2Client.send(
             new DeleteSubnetCommand({
@@ -548,7 +583,6 @@ export class AwsAdapter implements ProviderAdapter {
           );
         }
 
-        // Detach and delete internet gateway
         if (env.resources.internetGatewayId) {
           await ec2Client.send(
             new DetachInternetGatewayCommand({
@@ -563,16 +597,21 @@ export class AwsAdapter implements ProviderAdapter {
           );
         }
 
-        // Delete VPC
         await ec2Client.send(
           new DeleteVpcCommand({
             VpcId: env.resources.vpcId as string,
           }),
         );
-        console.log(`Deleted VPC and associated resources for: ${env.name}`);
+        logger.info(`Deleted VPC and associated resources for: ${env.name}`);
       } catch (error: any) {
-        console.warn("Could not delete VPC resources:", error.message);
+        failures.push(`vpc: ${error.message}`);
       }
+    }
+
+    if (failures.length > 0) {
+      throw new Error(
+        `Failed to fully destroy environment "${env.name}": ${failures.join("; ")}. Local state was not updated — retry destroy after resolving these errors.`,
+      );
     }
   }
 

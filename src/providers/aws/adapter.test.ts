@@ -27,6 +27,8 @@ vi.mock("@aws-sdk/client-s3", () => ({
     send: vi.fn().mockResolvedValue({}),
   })),
   CreateBucketCommand: vi.fn().mockImplementation(() => ({})),
+  PutPublicAccessBlockCommand: vi.fn().mockImplementation(() => ({})),
+  PutBucketEncryptionCommand: vi.fn().mockImplementation(() => ({})),
   DeleteBucketCommand: vi.fn().mockImplementation(() => ({})),
   ListObjectsV2Command: vi.fn().mockImplementation(() => ({ Contents: [] })),
   DeleteObjectsCommand: vi.fn().mockImplementation(() => ({})),
@@ -172,6 +174,25 @@ describe("AwsAdapter", () => {
       expect(env.resources.bucketName).toMatch(/^sandman-test-env-/);
     });
 
+    it("should not open SSH to the internet and should lock down the bucket", async () => {
+      const { AuthorizeSecurityGroupIngressCommand } = await import("@aws-sdk/client-ec2");
+      const {
+        PutPublicAccessBlockCommand,
+        PutBucketEncryptionCommand,
+      } = await import("@aws-sdk/client-s3");
+
+      await adapter.createEnvironment("secure-env");
+
+      expect(PutPublicAccessBlockCommand).toHaveBeenCalled();
+      expect(PutBucketEncryptionCommand).toHaveBeenCalled();
+      const sgArgs = vi.mocked(AuthorizeSecurityGroupIngressCommand).mock.calls.map(
+        (call) => call[0] as { IpPermissions?: { FromPort?: number }[] },
+      );
+      const ports = sgArgs.flatMap((args) => args.IpPermissions?.map((p) => p.FromPort) ?? []);
+      expect(ports).not.toContain(22);
+      expect(ports).toEqual(expect.arrayContaining([80, 443]));
+    });
+
     it("should use account ID from init", async () => {
       await adapter.init();
       const env = await adapter.createEnvironment("my-env");
@@ -262,7 +283,7 @@ describe("AwsAdapter", () => {
         updatedAt: new Date().toISOString(),
       };
 
-      const consoleSpy = vi.spyOn(console, "log");
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       await adapter.enableServices(env, ["s3", "lambda"] as ServiceName[]);
 
       expect(consoleSpy).toHaveBeenCalledWith(

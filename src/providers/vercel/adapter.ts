@@ -1,5 +1,6 @@
 import { ProviderAdapter, VERCEL_SERVICES } from "../base.js";
 import { EnvironmentRecord, ServiceName } from "../../types/index.js";
+import { logger } from "../../utils/logger.js";
 
 export class VercelAdapter implements ProviderAdapter {
   private teamId: string | null = null;
@@ -60,7 +61,7 @@ export class VercelAdapter implements ProviderAdapter {
     const enabledServices = services
       .map((s) => VERCEL_SERVICES[s])
       .filter(Boolean);
-    console.log(`Enabling Vercel services: ${enabledServices.join(", ")}`);
+    logger.info(`Enabling Vercel services: ${enabledServices.join(", ")}`);
   }
 
   async connect(env: EnvironmentRecord): Promise<Record<string, string>> {
@@ -68,9 +69,6 @@ export class VercelAdapter implements ProviderAdapter {
       provider: "vercel",
     };
 
-    if (process.env.VERCEL_TOKEN) {
-      result.VERCEL_TOKEN = process.env.VERCEL_TOKEN;
-    }
     if (env.projectId) {
       result.VERCEL_PROJECT_NAME = env.projectId;
     }
@@ -82,7 +80,7 @@ export class VercelAdapter implements ProviderAdapter {
   }
 
   async destroyEnvironment(env: EnvironmentRecord): Promise<void> {
-    console.log(`Cleaning up Vercel resources for environment: ${env.name}`);
+    logger.info(`Cleaning up Vercel resources for environment: ${env.name}`);
     // Future: delete Vercel project via API
     // DELETE /v9/projects/{projectId}
   }

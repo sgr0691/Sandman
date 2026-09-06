@@ -1,12 +1,17 @@
 import chalk from "chalk";
 import ora from "ora";
 import { StateStore } from "../../core/state-store.js";
-import { CreateOptions, ProviderType } from "../../types/index.js";
 import { getAdapter } from "../../providers/index.js";
+import {
+  experimentalWarning,
+  parseProvider,
+} from "../../providers/catalog.js";
 import {
   calculateEstimate,
   formatHourlyRate,
 } from "../../utils/cost-estimator.js";
+import { emitErr, emitOk, mapThrownError } from "../output.js";
+import { ENV_NAME_HINT, isValidEnvName } from "../env-name.js";
 
 interface CreateParams {
   dryRun?: boolean;
@@ -15,66 +20,82 @@ interface CreateParams {
 
 export async function createEnvironment(
   name: string,
-  options: CreateOptions,
+  options: { provider?: string; region?: string },
   store: StateStore,
   params: CreateParams,
 ): Promise<void> {
+  if (!isValidEnvName(name)) {
+    emitErr(params.json, {
+      code: "INVALID_NAME",
+      error: `Invalid environment name "${name}".`,
+      hint: ENV_NAME_HINT,
+    });
+  }
+
   const providerConfig = await store.getProvider();
-  const providerType = (options.provider || providerConfig.provider) as
-    | ProviderType
-    | undefined;
+  const rawProvider = options.provider || providerConfig.provider;
+  const providerType = rawProvider
+    ? parseProvider(String(rawProvider))
+    : undefined;
+
+  if (rawProvider && !providerType) {
+    emitErr(params.json, {
+      code: "INVALID_PROVIDER",
+      error: `Unknown provider "${rawProvider}".`,
+      hint: 'Use "sandman providers" to see supported providers.',
+      next: ["sandman providers --json"],
+    });
+  }
 
   if (!providerType) {
-    if (params.json) {
-      console.log(
-        JSON.stringify({
-          success: false,
-          error: 'No provider specified. Run "sandman init <provider>" first.',
-        }),
-      );
-      process.exit(1);
-    }
-    console.log(chalk.red("Error: No provider specified."));
-    console.log(
-      chalk.gray('Run "sandman init aws" or "sandman init gcp" first.'),
+    emitErr(
+      params.json,
+      {
+        code: "NO_PROVIDER",
+        error: "No provider specified. Run \"sandman init <provider>\" first.",
+        next: ["sandman init aws", "sandman init gcp", "sandman providers --json"],
+      },
+      () => {
+        console.log(chalk.red("Error: No provider specified."));
+        console.log(
+          chalk.gray('Run "sandman init aws" or "sandman init gcp" first.'),
+        );
+      },
     );
-    process.exit(1);
   }
 
   const existing = await store.getEnvironment(name);
   if (existing) {
-    if (params.json) {
-      console.log(
-        JSON.stringify({
-          success: false,
-          error: `Environment "${name}" already exists.`,
-        }),
-      );
-      process.exit(1);
-    }
-    console.log(chalk.red(`Environment "${name}" already exists.`));
-    process.exit(1);
+    emitErr(params.json, {
+      code: "ALREADY_EXISTS",
+      error: `Environment "${name}" already exists.`,
+      next: [`sandman status ${name}`, `sandman destroy ${name}`],
+    });
   }
+
+  const warning = experimentalWarning(providerType);
+  const region = options.region || providerConfig.region || "default";
 
   if (params.dryRun) {
     const dryRunResult = {
       dryRun: true,
       name,
       provider: providerType,
-      region: options.region || providerConfig.region || "default",
+      region,
+      ...(warning ? { warning } : {}),
     };
-    if (params.json) {
-      console.log(JSON.stringify(dryRunResult));
-      return;
-    }
-    console.log(chalk.cyan("[DRY RUN] Would create:"));
-    console.log(chalk.gray(`  - Environment: ${name}`));
-    console.log(chalk.gray(`  - Provider: ${providerType}`));
-    console.log(chalk.gray(`  - Region: ${dryRunResult.region}`));
+    emitOk(params.json, dryRunResult, () => {
+      console.log(chalk.cyan("[DRY RUN] Would create:"));
+      console.log(chalk.gray(`  - Environment: ${name}`));
+      console.log(chalk.gray(`  - Provider: ${providerType}`));
+      console.log(chalk.gray(`  - Region: ${region}`));
+      if (warning) {
+        console.log(chalk.yellow(`  - Warning: ${warning}`));
+      }
+    });
     return;
   }
 
-  // Calculate estimated cost
   const costEstimate = calculateEstimate(providerType, []);
   const costDisplay = formatHourlyRate(costEstimate.hourlyRate);
 
@@ -90,6 +111,9 @@ export async function createEnvironment(
           '" when finished to avoid ongoing charges\n',
       ),
     );
+    if (warning) {
+      console.log(chalk.yellow(`⚠ ${warning}\n`));
+    }
   }
 
   const spinner = params.json ? null : ora("Creating environment...").start();
@@ -100,27 +124,40 @@ export async function createEnvironment(
 
     await store.saveEnvironment(env);
 
-    if (params.json) {
-      console.log(JSON.stringify({ success: true, environment: env }));
-      return;
-    }
-
-    spinner!.succeed(
-      chalk.green(`Environment "${name}" created successfully!`),
+    emitOk(
+      params.json,
+      {
+        environment: env,
+        ...(warning ? { warning } : {}),
+      },
+      () => {
+        spinner!.succeed(
+          chalk.green(`Environment "${name}" created successfully!`),
+        );
+        if (warning) {
+          console.log(chalk.yellow(`⚠ ${warning}`));
+        }
+        console.log(chalk.cyan(`\n→ Run "sandman status ${name}" to see details`));
+        console.log(
+          chalk.cyan(
+            `→ Run "sandman enable <services> -e ${name}" to enable services`,
+          ),
+        );
+      },
     );
-    console.log(chalk.cyan(`\n→ Run "sandman status ${name}" to see details`));
-    console.log(
-      chalk.cyan(
-        `→ Run "sandman enable <services> -e ${name}" to enable services`,
-      ),
+  } catch (error: unknown) {
+    spinner?.fail?.(chalk.red("Failed to create environment"));
+    const mapped = mapThrownError(error);
+    emitErr(
+      params.json,
+      {
+        ...mapped,
+        hint: 'Partial cloud resources may exist. Run "sandman status" / "sandman destroy" after fixing the issue.',
+      },
+      () => {
+        console.log(chalk.red(`Error: ${mapped.error}`));
+      },
     );
-  } catch (error: any) {
-    if (params.json) {
-      console.log(JSON.stringify({ success: false, error: error.message }));
-      process.exit(1);
-    }
-    spinner!.fail(chalk.red("Failed to create environment"));
-    console.log(chalk.red(`Error: ${error.message}`));
-    process.exit(1);
   }
 }
+

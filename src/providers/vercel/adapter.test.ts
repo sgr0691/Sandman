@@ -88,7 +88,7 @@ describe("VercelAdapter", () => {
         updatedAt: new Date().toISOString(),
       };
 
-      const consoleSpy = vi.spyOn(console, "log");
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       await adapter.enableServices(env, ["functions", "edge", "blob"]);
 
       expect(consoleSpy).toHaveBeenCalledWith(
@@ -108,7 +108,7 @@ describe("VercelAdapter", () => {
         updatedAt: new Date().toISOString(),
       };
 
-      const consoleSpy = vi.spyOn(console, "log");
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       await adapter.enableServices(env, ["invalid-service" as ServiceName]);
 
       expect(consoleSpy).toHaveBeenCalledWith("Enabling Vercel services: ");
@@ -135,7 +135,7 @@ describe("VercelAdapter", () => {
       const creds = await adapter.connect(env);
 
       expect(creds.provider).toBe("vercel");
-      expect(creds.VERCEL_TOKEN).toBe("my-token");
+      expect(creds.VERCEL_TOKEN).toBeUndefined();
       expect(creds.VERCEL_PROJECT_NAME).toBe("my-project");
       expect(creds.VERCEL_TEAM_ID).toBe("team_abc");
     });
@@ -170,7 +170,7 @@ describe("VercelAdapter", () => {
         updatedAt: new Date().toISOString(),
       };
 
-      const consoleSpy = vi.spyOn(console, "log");
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       await adapter.destroyEnvironment(env);
 
       expect(consoleSpy).toHaveBeenCalledWith(

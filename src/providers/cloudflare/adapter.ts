@@ -1,5 +1,6 @@
 import { ProviderAdapter, CLOUDFLARE_SERVICES } from "../base.js";
 import { EnvironmentRecord, ServiceName } from "../../types/index.js";
+import { logger } from "../../utils/logger.js";
 
 export class CloudflareAdapter implements ProviderAdapter {
   private accountId: string | null = null;
@@ -76,7 +77,7 @@ export class CloudflareAdapter implements ProviderAdapter {
     const enabledServices = services
       .map((s) => CLOUDFLARE_SERVICES[s])
       .filter(Boolean);
-    console.log(`Enabling Cloudflare services: ${enabledServices.join(", ")}`);
+    logger.info(`Enabling Cloudflare services: ${enabledServices.join(", ")}`);
   }
 
   async connect(env: EnvironmentRecord): Promise<Record<string, string>> {
@@ -87,9 +88,6 @@ export class CloudflareAdapter implements ProviderAdapter {
     if (env.accountId) {
       result.CLOUDFLARE_ACCOUNT_ID = env.accountId;
     }
-    if (process.env.CLOUDFLARE_API_TOKEN) {
-      result.CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
-    }
     if (env.resources.namespaceId) {
       result.CLOUDFLARE_NAMESPACE_ID = env.resources.namespaceId as string;
     }
@@ -98,7 +96,7 @@ export class CloudflareAdapter implements ProviderAdapter {
   }
 
   async destroyEnvironment(env: EnvironmentRecord): Promise<void> {
-    console.log(
+    logger.info(
       `Cleaning up Cloudflare resources for environment: ${env.name}`,
     );
     // Future: delete KV namespaces, R2 buckets, D1 databases via API

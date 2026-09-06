@@ -11,5 +11,9 @@ export function getAdapter(providerType: ProviderType): ProviderAdapter {
     case 'gcp': return new GcpAdapter();
     case 'cloudflare': return new CloudflareAdapter();
     case 'vercel': return new VercelAdapter();
+    default: {
+      const unknown: never = providerType;
+      throw new Error(`Unknown provider: ${String(unknown)}`);
+    }
   }
 }

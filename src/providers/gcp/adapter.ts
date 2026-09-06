@@ -1,5 +1,6 @@
 import { ProviderAdapter, GCP_SERVICES } from "../base.js";
 import { EnvironmentRecord, ServiceName } from "../../types/index.js";
+import { logger } from "../../utils/logger.js";
 
 export class GcpAdapter implements ProviderAdapter {
   private projectId: string | null = null;
@@ -29,6 +30,9 @@ export class GcpAdapter implements ProviderAdapter {
         this.projectId = gcloudProject;
       } else if (projects.length > 0 && projects[0].projectId) {
         this.projectId = projects[0].projectId;
+        logger.warn(
+          `No GCP_PROJECT / GOOGLE_CLOUD_PROJECT set; using first accessible project "${this.projectId}". Set GCP_PROJECT to avoid targeting the wrong project.`,
+        );
       } else {
         // Auth works but no projects - user needs to create one or set GCP_PROJECT
         this.projectId = null;
@@ -152,7 +156,7 @@ export class GcpAdapter implements ProviderAdapter {
         return;
       }
 
-      console.log(`Enabling GCP services: ${serviceNames.join(", ")}`);
+      logger.info(`Enabling GCP services: ${serviceNames.join(", ")}`);
 
       // Enable each service
       for (const serviceName of serviceNames) {
@@ -198,7 +202,7 @@ export class GcpAdapter implements ProviderAdapter {
       // Wait for the operation to complete
       await operation.promise();
 
-      console.log(`Deleted GCP project: ${env.projectId}`);
+      logger.info(`Deleted GCP project: ${env.projectId}`);
     } catch (error: any) {
       throw new Error(
         `Failed to delete GCP project: ${error.message ?? "Unknown error"}`,

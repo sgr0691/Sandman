@@ -37,6 +37,7 @@ sandman list [--json]
 sandman status <name> [--json]
 sandman connect <name> [--json]
 sandman destroy <name> [-y] [--json]
+sandman providers [--json]
 ```
 
 ## Provisioning Workflow
@@ -90,10 +91,12 @@ sandman connect vercel-demo --json
 
 ## Rules
 
-- Always use `--json` flag for machine-readable output
+- Always use `--json` flag for machine-readable output. Failures include `code`, `error`, `hint`, and `next`.
+- Run `sandman providers --json` when the user asks for Cloudflare or Vercel: they are experimental (local registry only).
 - After creating any environment, remind the user: **run `sandman destroy <name>` when done** to avoid cloud charges
-- Before destroying an environment, confirm with the user unless they explicitly said to skip it
+- Before destroying, confirm with the user unless they explicitly said to skip it, then run `sandman destroy <name> -y --json`
+- `sandman connect --json` redacts tokens. Do not pass `--show-secrets` unless the user asks.
 - If credentials are missing, tell the user exactly what env vars to set or CLI auth commands to run
 - Do not re-initialize a provider if it already appears in `sandman list --json`
-- If Azure is requested, explain it's coming soon and suggest an alternative provider
+- If Azure is requested, explain it's coming soon and suggest AWS or GCP
 - For dry-run previews, use `sandman create <name> --provider <provider> --dry-run --json`
